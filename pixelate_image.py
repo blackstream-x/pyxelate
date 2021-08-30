@@ -27,7 +27,7 @@ from tkinter import filedialog
 
 # local modules
 
-# to add: import pixelate
+import pixelate
 
 #
 # Constants
@@ -437,7 +437,6 @@ class UserInterface():
             title='About…')
         #
 
-
     def __show_errors(self):
         """Show errors if there are any"""
         if self.variables.errors:
@@ -580,7 +579,7 @@ def main(arguments=None):
     selected_file = None
     try:
         loglevel = arguments.loglevel
-        selected_file = arguments.directory
+        selected_file = arguments.file
     except AttributeError:
         loglevel = logging.WARNING
     #
