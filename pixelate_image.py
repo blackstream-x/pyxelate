@@ -13,7 +13,7 @@ Pixelate a part of an image
 
 import argparse
 import logging
-import mimetypes
+# import mimetypes
 import os
 import pathlib
 # import re
@@ -36,7 +36,7 @@ import pixelate
 
 SCRIPT_NAME = 'Partially pixelate an image'
 HOMEPAGE = 'https://github.com/blackstream-x/pyxelate'
-MAIN_WINDOW_TITLE = 'pyxelate: partiyllay pixelate an image'
+MAIN_WINDOW_TITLE = 'pyxelate: partially pixelate an image'
 
 SCRIPT_PATH = pathlib.Path(sys.argv[0])
 # Follow symlinks
@@ -325,7 +325,7 @@ class UserInterface():
             #
             # TODO: read image data
             # self.varibales.image = pixelate.imageData(file_path)
-            self.variables.file_name = file_path.name
+            self.variables.file_name.set(file_path.name)
             break
         #
 
@@ -565,58 +565,28 @@ def __get_arguments():
         dest='loglevel',
         help='Limit message output to warnings and errors')
     argument_parser.add_argument(
-        '-f', '--file',
+        'image_file',
+        nargs='?',
         type=pathlib.Path,
-        help='An image file')
-    argument_parser.add_argument(
-        'dummy',
-        nargs=argparse.REMAINDER)
+        help='An image file. If none is provided,'
+        ' the script will ask for a file.')
     return argument_parser.parse_args()
 
 
 def main(arguments=None):
     """Main script function"""
-    selected_file = None
-    try:
-        loglevel = arguments.loglevel
-        selected_file = arguments.file
-    except AttributeError:
-        loglevel = logging.WARNING
-    #
-    if selected_file and not selected_file.is_file():
-        selected_file = None
-    #
     logging.basicConfig(
         format='%(levelname)-8s\u2551 %(funcName)s → %(message)s',
-        level=loglevel)
-    try:
-        selected_names = os.environ['NAUTILUS_SCRIPT_SELECTED_FILE_PATHS']
-    except KeyError:
-        pass
-    else:
-        for name in selected_names.splitlines():
-            if name:
-                current_path = pathlib.Path(name)
-                if current_path.is_file():
-                    selected_file = current_path
-                    break
-                #
-            #
-        #
+        level=arguments.loglevel)
+    selected_file = arguments.image_file
+    if selected_file and not selected_file.is_file():
+        selected_file = None
     #
     UserInterface(selected_file)
 
 
 if __name__ == '__main__':
-    # =========================================================================
-    # Workaround for unexpected behavior when called
-    # as a Nautilus script in combination with argparse
-    # =========================================================================
-    try:
-        sys.exit(main(__get_arguments()))
-    except Exception:
-        sys.exit(main())
-    #
+    sys.exit(main(__get_arguments()))
 
 
 # vim: fileencoding=utf-8 ts=4 sts=4 sw=4 autoindent expandtab syntax=python:
