@@ -10,9 +10,12 @@ Module for pixelating parts of images
 
 
 import logging
+import math
 import time
 
-from PIL import Image, ImageDraw
+from fractions import Fraction
+
+from PIL import Image, ImageDraw, ImageTk
 
 
 #
@@ -21,11 +24,27 @@ from PIL import Image, ImageDraw
 
 
 DEFAULT_PIXELSIZE = 10
+DEFAULT_CANVAS_SIZE = (720, 405)
 
 
 #
 # Helper functions
 #
+
+
+def dimension_display_ratio(image_size, canvas_size):
+    """Display ratio calculated per dimension"""
+    if image_size < canvas_size:
+        return 1
+    #
+    raw_ratio = Fraction(image_size, canvas_size)
+    if raw_ratio <= 3:
+        return Fraction(math.ceil(raw_ratio * 4), 4)
+    #
+    if raw_ratio <= 5:
+        return Fraction(math.ceil(raw_ratio * 2), 2)
+    #
+    return math.ceil(raw_ratio)
 
 
 def most_frequent_color(image):
@@ -173,16 +192,35 @@ class BasePixelation:
     kw_px_mask = 'pixelated area mask'
     kw_mask_shape = 'mask_shape'
     kw_result = 'resulting image'
+    kw_display_ratio = 'display ratio'
 
-    def __init__(self, image_path, pixelsize=DEFAULT_PIXELSIZE):
+    def __init__(self,
+                 image_path,
+                 pixelsize=DEFAULT_PIXELSIZE,
+                 canvas_size=DEFAULT_CANVAS_SIZE):
         """Allocate the internal cache"""
 
         self.__cache = {}
-        self.__pixelsize = DEFAULT_PIXELSIZE
+        self.__pixelsize = 0
+        self.__canvas_size = (0, 0)
         self.__shapes = ShapesCache()
         self.shape_offset = (0, 0)
-        self.load_image(image_path)
         self.set_pixelsize(pixelsize)
+        self.set_canvas_size(canvas_size)
+        self.load_image(image_path)
+        #
+
+    def lazy_evaluation(self, cache_key, producer, clear_on_miss=None):
+        """Return an item from the cache or get it produced by the
+        producer function"""
+        try:
+            return self.__cache[cache_key]
+        except KeyError:
+            self.__cache[cache_key] = producer()
+            if clear_on_miss:
+                self.__cache.pop(clear_on_miss, None)
+            #
+            return self.__cache[cache_key]
         #
 
     def load_image(self, image_path):
@@ -195,6 +233,13 @@ class BasePixelation:
             self.__pixelsize = pixelsize
             self.__cache.pop(self.kw_px_area, None)
             self.__cache.pop(self.kw_result, None)
+        #
+
+    def set_canvas_size(self, canvas_size):
+        """Set the canvas size"""
+        if self.__canvas_size != canvas_size:
+            self.__canvas_size = canvas_size
+            self.__cache.pop(self.kw_display_ratio, None)
         #
 
     def set_shape(self, center, shape_type, size):
@@ -224,6 +269,12 @@ class BasePixelation:
         return self.__pixelsize
 
     @property
+    def display_ratio(self):
+        """The display ratio"""
+        return self.lazy_evaluation(
+            self.kw_display_ratio, self.get_display_ratio)
+
+    @property
     def original(self):
         """The original image"""
         return self.__cache[self.kw_orig]
@@ -231,36 +282,29 @@ class BasePixelation:
     @property
     def pixelated_area(self):
         """The pixelated area of the original image"""
-        try:
-            return self.__cache[self.kw_px_area]
-        except KeyError:
-            self.__cache.pop(self.kw_result, None)
-            return self.__cache.setdefault(
-                self.kw_px_area,
-                self.get_pixelated_area())
-        #
+        return self.lazy_evaluation(
+            self.kw_px_area,
+            self.get_pixelated_area,
+            clear_on_miss=self.kw_result)
 
     @property
     def mask(self):
         """The mask for the pixelated area"""
-        try:
-            return self.__cache[self.kw_px_mask]
-        except KeyError:
-            return self.__cache.setdefault(
-                self.kw_px_mask,
-                self.get_mask())
-        #
+        return self.lazy_evaluation(self.kw_px_mask, self.get_mask)
 
     @property
     def result(self):
         """The partially pixelated image"""
-        try:
-            return self.__cache[self.kw_result]
-        except KeyError:
-            return self.__cache.setdefault(
-                self.kw_result,
-                self.get_result())
-        #
+        return self.lazy_evaluation(self.kw_result, self.get_result)
+
+    def get_display_ratio(self):
+        """Get the display ratio from the image and canvas sizes"""
+        (canvas_width, canvas_height) = self.__canvas_size
+        ratio_x = dimension_display_ratio(
+            self.original.width, canvas_width)
+        ratio_y = dimension_display_ratio(
+            self.original.height, canvas_height)
+        return max(ratio_x, ratio_y)
 
     def get_mask(self):
         """Return the mask for the pixelated image"""
@@ -276,6 +320,23 @@ class BasePixelation:
         """Return the result
         """
         raise NotImplementedError
+
+    def resized_to_canvas(self, source_image):
+        """Return the image resized to canvas size (or original size)"""
+        if self.display_ratio > 1:
+            return source_image.resize(
+                (source_image.width // self.display_ratio,
+                 source_image.height // self.display_ratio),
+                resample=Image.BICUBIC)
+        #
+        return source_image
+
+    def get_tk_image(self, source_image):
+        """Return the image resized to canvas size and
+        as a PhotoImage instance for Tkinter
+        """
+        return ImageTk.PhotoImage(
+            self.resized_to_canvas(source_image))
 
 
 class ImagePixelation(BasePixelation):
@@ -321,10 +382,10 @@ class FramePixelation(BasePixelation):
         fully pixelated
         """
         (offset_x, offset_y) = self.shape_offset
-        box = (
-            offset_x, offset_y,
-            offset_x + self.mask_shape.width,
-            offset_y + self.mask_shape.height)
+        box = (offset_x,
+               offset_y,
+               offset_x + self.mask_shape.width,
+               offset_y + self.mask_shape.height)
         return pixelated(self.original.crop(box), pixelsize=self.pixelsize)
 
     def get_result(self):
