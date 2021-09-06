@@ -13,7 +13,7 @@ import logging
 import pathlib
 import sys
 
-import pixelate
+import pixelations
 
 
 #
@@ -64,7 +64,7 @@ def main(arguments=None):
         format='%(levelname)-8s\u2551 %(funcName)s → %(message)s',
         level=loglevel)
     #
-    image_data = pixelate.ImageData(selected_file)
+    image_data = pixelations.ImageData(selected_file)
     image_data.set_shape((0, 0), 'ellipse', (200, 200))
     base_dir = selected_file.parent
     base_name = selected_file.name

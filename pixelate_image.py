@@ -27,7 +27,7 @@ from tkinter import filedialog
 
 # local modules
 
-import pixelate
+import pixelations
 
 #
 # Constants
@@ -324,7 +324,7 @@ class UserInterface():
             # if not mimetype is imagemimetype: continue
             #
             # TODO: read image data
-            # self.varibales.image = pixelate.imageData(file_path)
+            # self.varibales.image = pixelations.ImagePx(file_path)
             self.variables.file_name.set(file_path.name)
             break
         #

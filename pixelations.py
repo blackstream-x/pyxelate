@@ -2,7 +2,7 @@
 
 """
 
-pixelate.py
+pixelations.py
 
 Module for pixelating parts of images
 
