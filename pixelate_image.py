@@ -573,7 +573,7 @@ def __get_arguments():
     return argument_parser.parse_args()
 
 
-def main(arguments=None):
+def main(arguments):
     """Main script function"""
     logging.basicConfig(
         format='%(levelname)-8s\u2551 %(funcName)s → %(message)s',

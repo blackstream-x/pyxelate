@@ -10,6 +10,7 @@ Module for pixelating parts of images
 
 
 import logging
+import time
 
 from PIL import Image, ImageDraw
 
@@ -73,18 +74,103 @@ def most_frequent_color(image):
     return selected_color
 
 
+def pixelated(original_image, pixelsize=DEFAULT_PIXELSIZE):
+    """Return a copy of the original image, pixelated"""
+    original_width = original_image.width
+    original_height = original_image.height
+    reduced_width = original_width // pixelsize + 1
+    reduced_height = original_height // pixelsize + 1
+    oversize_width = reduced_width * pixelsize
+    oversize_height = reduced_height * pixelsize
+    oversized = Image.new(
+        original_image.mode,
+        (oversize_width, oversize_height),
+        color=most_frequent_color(original_image))
+    oversized.paste(original_image)
+    reduced = oversized.resize((reduced_width, reduced_height), resample=0)
+    oversized = reduced.resize(
+        (oversize_width, oversize_height), resample=0)
+    return oversized.crop((0, 0, original_width, original_height))
+
+
+
 #
 # Classes
 #
 
 
-class ImageData:
+class Borg:
 
-    """Hold original image data as well as the pixelated data"""
+    """Shared state class as documented in
+    <https://www.oreilly.com/
+     library/view/python-cookbook/0596001673/ch05s23.html>
+     """
+
+    _shared_state = {}
+
+    def __init__(self):
+        """Initalize shared state"""
+        self.__dict__ = self._shared_state
+
+
+class ShapesCache(Borg):
+
+    """Borg cache for Mask shapes"""
+
+    limit = 50
+
+    def __init__(self):
+        """Allocate the cache"""
+        super().__init__()
+        self.__last_access = {}
+        self.__shapes = {}
+
+    def get_cached(self, shape_type, size):
+        """Get a cached shape or create a new one"""
+        key = (shape_type, size)
+        try:
+            cached_shape = self.__shapes[key]
+        except KeyError:
+            pass
+        else:
+            self.__last_access[key] = time.time()
+            return cached_shape
+        #
+        shape_image = Image.new('L', size, color=0)
+        draw = ImageDraw.Draw(shape_image)
+        if 'rectangle'.startswith(shape_type):
+            draw_method = draw.rectangle
+        elif 'ellipse'.startswith(shape_type):
+            draw_method = draw.ellipse
+        else:
+            raise ValueError('Unsupported shape %r!' % shape_type)
+        #
+        width, height = size
+        draw_method((0, 0, width - 1, height - 1), fill=255)
+        self.__shapes[key] = shape_image
+        self.__last_access[key] = time.time()
+        self.delete_oldest_shapes()
+        return shape_image
+
+    def delete_oldest_shapes(self):
+        """Delete the oldest shapes from the cache
+        if the limit has been exceeded
+        """
+        if len(self.__shapes) > self.limit:
+            for key in sorted(self.__last_access)[-self.limit:]:
+                del self.__shapes[key]
+                del self.__last_access[key]
+            #
+        #
+
+
+class BasePixelation:
+
+    """Pixelation base class"""
 
     kw_orig = 'original image'
-    kw_px_full = 'pixelated full image'
-    kw_px_mask = 'pixelated image mask'
+    kw_px_area = 'pixelated image area'
+    kw_px_mask = 'pixelated area mask'
     kw_mask_shape = 'mask_shape'
     kw_result = 'resulting image'
 
@@ -93,7 +179,7 @@ class ImageData:
 
         self.__cache = {}
         self.__pixelsize = DEFAULT_PIXELSIZE
-        self.__shapes = {}
+        self.__shapes = ShapesCache()
         self.__shape_offset = (0, 0)
         self.load_image(image_path)
         self.set_pixelsize(pixelsize)
@@ -107,7 +193,7 @@ class ImageData:
         """Set the pixelsize and delete the cached pixelated results"""
         if self.__pixelsize != pixelsize:
             self.__pixelsize = pixelsize
-            self.__cache.pop(self.kw_px_full, None)
+            self.__cache.pop(self.kw_px_area, None)
             self.__cache.pop(self.kw_result, None)
         #
 
@@ -116,7 +202,7 @@ class ImageData:
         self.__shape_offset = offset
         self.__cache.pop(self.kw_px_mask, None)
         self.__cache.pop(self.kw_result, None)
-        self.__cache[self.kw_mask_shape] = self.get_cached_shape(
+        self.__cache[self.kw_mask_shape] = self.__shapes.get_cached(
             shape_type, size)
 
     @property
@@ -134,25 +220,26 @@ class ImageData:
         return self.__cache[self.kw_orig]
 
     @property
-    def pixelated_full(self):
-        """The fully pixelated version of the original image"""
+    def pixelated_area(self):
+        """The pixelated area of the original image"""
         try:
-            return self.__cache[self.kw_px_full]
+            return self.__cache[self.kw_px_area]
         except KeyError:
+            self.__cache.pop(self.kw_result, None)
             return self.__cache.setdefault(
-                self.kw_px_full,
-                self.get_pixelated_full_image())
+                self.kw_px_area,
+                self.get_pixelated_area())
         #
 
     @property
-    def pixelated_mask(self):
-        """The Mask for the pixelation"""
+    def mask(self):
+        """The mask for the pixelated area"""
         try:
             return self.__cache[self.kw_px_mask]
         except KeyError:
             return self.__cache.setdefault(
                 self.kw_px_mask,
-                self.get_pixelated_mask())
+                self.get_mask())
         #
 
     @property
@@ -166,60 +253,24 @@ class ImageData:
                 self.get_result())
         #
 
-    def get_cached_shape(self, shape_type, size):
-        """Get a cached shape or create a new one"""
-        try:
-            return self.__shapes[(shape_type, size)]
-        except KeyError:
-            pass
-        #
-        shape_image = Image.new('L', size, color=0)
-        draw = ImageDraw.Draw(shape_image)
-        if 'rectangle'.startswith(shape_type):
-            draw_method = draw.rectangle
-        elif 'ellipse'.startswith(shape_type):
-            draw_method = draw.ellipse
-        else:
-            raise ValueError('Unsupported shape %r!' % shape_type)
-        #
-        width, height = size
-        draw_method((0, 0, width - 1, height - 1), fill=255)
-        return self.__shapes.setdefault((shape_type, size), shape_image)
+    def get_mask(self):
+        """Return the mask for the pixelated image"""
+        px_mask = Image.new('L', self.original.size, color=0)
+        px_mask.paste(self.mask_shape, box=self.__shape_offset)
+        return px_mask
 
-    def get_pixelated_mask(self):
-        """Return the mask for the pixelation
-        """
-        mask = Image.new('L', self.original.size, color=0)
-        mask.paste(self.mask_shape, box=self.__shape_offset)
-        return mask
-
-    def get_pixelated_full_image(self):
+    def get_pixelated_area(self):
         """Return a copy of the original image,
         fully pixelated
         """
-        original_width = self.original.width
-        original_height = self.original.height
-        reduced_width = original_width // self.__pixelsize + 1
-        reduced_height = original_height // self.__pixelsize + 1
-        oversize_width = reduced_width * self.__pixelsize
-        oversize_height = reduced_height * self.__pixelsize
-        oversized = Image.new(
-            self.original.mode,
-            (oversize_width, oversize_height),
-            color=most_frequent_color(self.original))
-        oversized.paste(self.original)
-        reduced = oversized.resize((reduced_width, reduced_height), resample=0)
-        oversized = reduced.resize(
-            (oversize_width, oversize_height), resample=0)
-        self.__cache.pop(self.kw_result, None)
-        return oversized.crop((0, 0, original_width, original_height))
+        return pixelated(self.original, pixelsize=self.__pixelsize)
 
     def get_result(self):
         """Return the result
         """
         result_image = self.original.copy()
         result_image.paste(
-            self.pixelated_full, box=None, mask=self.pixelated_mask)
+            self.pixelated_area, box=None, mask=self.mask)
         return result_image
 
 
