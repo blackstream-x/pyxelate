@@ -69,6 +69,8 @@ PHASES = (
 PANEL_NAMES = {
     SELECT_AREA: 'Select area to be pixelated'}
 
+CANVAS_WIDTH = 720
+CANVAS_HEIGHT = 405
 
 #
 # Helper Functions
@@ -247,7 +249,10 @@ class UserInterface():
         self.main_window = tkinter.Tk()
         self.main_window.title(MAIN_WINDOW_TITLE)
         self.variables = Namespace(
+            current_panel=None,
+            disable_next_button=False,
             errors=[],
+            tk_image=None,
             file_name=tkinter.StringVar(),
             image=None,
             original_path=file_path,
@@ -259,7 +264,8 @@ class UserInterface():
             panel_display=tkinter.StringVar())
         self.widgets = Namespace(
             action_area=None,
-            buttons_area=None)
+            buttons_area=None,
+            canvas=None)
         overview_frame = tkinter.Frame(self.main_window)
         file_label = tkinter.Label(
             overview_frame,
@@ -296,6 +302,7 @@ class UserInterface():
                         preset_path=None,
                         quit_on_empty_choice=False):
         """Choose an image via file dialog"""
+        self.variables.current_panel = CHOOSE_IMAGE
         if preset_path:
             if not preset_path.is_dir():
                 initial_dir = str(preset_path.parent)
@@ -323,11 +330,13 @@ class UserInterface():
             # if the selected file is not an image
             # if not mimetype is imagemimetype: continue
             #
-            # TODO: read image data
-            # self.varibales.image = pixelations.ImagePx(file_path)
+            # read image data
+            self.variables.image = pixelations.ImagePixelation(
+                file_path, canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
             self.variables.file_name.set(file_path.name)
             break
         #
+        self.next_panel()
 
     def do_select_area(self):
         """..."""
@@ -356,7 +365,24 @@ class UserInterface():
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
-        ...
+        self.widgets.canvas = tkinter.Canvas(
+            image_frame,
+            width=CANVAS_WIDTH,
+            height=CANVAS_HEIGHT)
+        self.variables.tk_image = self.variables.image.get_tk_image(
+            self.variables.image.original)
+        image_id = self.widgets.canvas.create_image(
+            0, 0,
+            image=self.variables.tk_image,
+            anchor=tkinter.NW)
+        self.widgets.canvas.grid()
+        logging.info(
+            'Image display ratio: %s',
+            self.variables.image.display_ratio)
+        logging.info(
+            'Image size on canvas: %s x %s',
+            self.variables.tk_image.width(),
+            self.variables.tk_image.height())
         image_frame.grid(**self.grid_fullwidth)
 
     def next_action(self):

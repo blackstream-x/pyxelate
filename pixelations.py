@@ -325,8 +325,8 @@ class BasePixelation:
         """Return the image resized to canvas size (or original size)"""
         if self.display_ratio > 1:
             return source_image.resize(
-                (source_image.width // self.display_ratio,
-                 source_image.height // self.display_ratio),
+                (int(source_image.width / self.display_ratio),
+                 int(source_image.height / self.display_ratio)),
                 resample=Image.BICUBIC)
         #
         return source_image
