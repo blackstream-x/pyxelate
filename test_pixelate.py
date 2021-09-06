@@ -56,7 +56,7 @@ def main(arguments):
         level=arguments.loglevel)
     selected_file = arguments.image_file
     #
-    image_data = pixelations.BasePixelation(selected_file)
+    image_data = pixelations.ImagePixelation(selected_file)
     image_data.set_shape((0, 0), 'ellipse', (200, 200))
     base_dir = selected_file.parent
     base_name = selected_file.name

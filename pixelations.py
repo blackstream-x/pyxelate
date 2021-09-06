@@ -180,7 +180,7 @@ class BasePixelation:
         self.__cache = {}
         self.__pixelsize = DEFAULT_PIXELSIZE
         self.__shapes = ShapesCache()
-        self.__shape_offset = (0, 0)
+        self.shape_offset = (0, 0)
         self.load_image(image_path)
         self.set_pixelsize(pixelsize)
         #
@@ -197,9 +197,13 @@ class BasePixelation:
             self.__cache.pop(self.kw_result, None)
         #
 
-    def set_shape(self, offset, shape_type, size):
+    def set_shape(self, center, shape_type, size):
         """Set the shape and delete the cached results"""
-        self.__shape_offset = offset
+        (pos_x, pos_y) = center
+        (width, height) = size
+        offset_x = pos_x - width // 2
+        offset_y = pos_y - height // 2
+        self.shape_offset = (offset_x, offset_y)
         self.__cache.pop(self.kw_px_mask, None)
         self.__cache.pop(self.kw_result, None)
         self.__cache[self.kw_mask_shape] = self.__shapes.get_cached(
@@ -213,6 +217,11 @@ class BasePixelation:
         except KeyError as error:
             raise ValueError('No mask shape set yet!') from error
         #
+
+    @property
+    def pixelsize(self):
+        """The pixel size"""
+        return self.__pixelsize
 
     @property
     def original(self):
@@ -255,15 +264,38 @@ class BasePixelation:
 
     def get_mask(self):
         """Return the mask for the pixelated image"""
+        raise NotImplementedError
+
+    def get_pixelated_area(self):
+        """Return a copy of the original image,
+        fully pixelated
+        """
+        raise NotImplementedError
+
+    def get_result(self):
+        """Return the result
+        """
+        raise NotImplementedError
+
+
+class ImagePixelation(BasePixelation):
+
+    """Image pixelation:
+    The pixelation area covers the whole image;
+    only the mask is re-drawn
+    """
+
+    def get_mask(self):
+        """Return the mask for the pixelated image"""
         px_mask = Image.new('L', self.original.size, color=0)
-        px_mask.paste(self.mask_shape, box=self.__shape_offset)
+        px_mask.paste(self.mask_shape, box=self.shape_offset)
         return px_mask
 
     def get_pixelated_area(self):
         """Return a copy of the original image,
         fully pixelated
         """
-        return pixelated(self.original, pixelsize=self.__pixelsize)
+        return pixelated(self.original, pixelsize=self.pixelsize)
 
     def get_result(self):
         """Return the result
@@ -271,6 +303,36 @@ class BasePixelation:
         result_image = self.original.copy()
         result_image.paste(
             self.pixelated_area, box=None, mask=self.mask)
+        return result_image
+
+
+class FramePixelation(BasePixelation):
+
+    """(Video) Frame pixelation:
+    The pixelation is only as big as required
+    """
+
+    def get_mask(self):
+        """Return the mask for the pixelated image"""
+        return self.mask_shape
+
+    def get_pixelated_area(self):
+        """Return a copy of the original image,
+        fully pixelated
+        """
+        (offset_x, offset_y) = self.shape_offset
+        box = (
+            offset_x, offset_y,
+            offset_x + self.mask_shape.width,
+            offset_y + self.mask_shape.height)
+        return pixelated(self.original.crop(box), pixelsize=self.pixelsize)
+
+    def get_result(self):
+        """Return the result
+        """
+        result_image = self.original.copy()
+        result_image.paste(
+            self.pixelated_area, box=self.shape_offset, mask=self.mask)
         return result_image
 
 
