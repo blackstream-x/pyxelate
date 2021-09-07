@@ -321,6 +321,20 @@ class BasePixelation:
         """
         raise NotImplementedError
 
+    def from_display_size(self, display_length):
+        """Return the translated display size as an integer"""
+        if self.display_ratio > 1:
+            return int(display_length * self.display_ratio)
+        #
+        return display_length
+
+    def to_display_size(self, length):
+        """Return the display size of length as an integer"""
+        if self.display_ratio > 1:
+            return int(length / self.display_ratio)
+        #
+        return length
+
     def resized_to_canvas(self, source_image):
         """Return the image resized to canvas size (or original size)"""
         if self.display_ratio > 1:
