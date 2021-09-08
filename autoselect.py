@@ -8,7 +8,8 @@ autoselect.py
 Automatically select the correct script for pixelating
 an image or a video clip, based on the provided file's
 mime type.
-Supports Nautilus integration
+
+Directly supports Nautilus integration.
 
 """
 
@@ -21,16 +22,9 @@ import pathlib
 # import re
 import subprocess
 import sys
-# import tkinter
-# import webbrowser
 
-# from tkinter import filedialog
-# from tkinter import messagebox
-# from tkinter import ttk
+from tkinter import messagebox
 
-# local modules
-
-# import pixelate
 
 #
 # Constants
@@ -59,7 +53,9 @@ try:
     VERSION = VERSION_PATH.read_text().strip()
 except OSError as error:
     VERSION = '(Version file is missing: %s)' % error
-#
+
+RETURNCODE_ERROR = 1
+
 
 #
 # Helper Functions
@@ -103,7 +99,12 @@ def start_matching_script(file_path):
             (str(SCRIPT_PATH.parent / matching_script), str(file_path)),
             check=True).returncode
     #
-    raise ValueError('No script for file type %r!' % file_type)
+    messagebox.showerror(
+        'Wrong file type',
+        f'{file_path.name!r} is a file of type {file_type!r},'
+        ' but an image or a video is required.',
+        icon=messagebox.ERROR)
+    return RETURNCODE_ERROR
 
 
 def __get_arguments():
@@ -127,7 +128,7 @@ def __get_arguments():
         '--install-nautilus-script',
         nargs='?',
         const='Pixelate',
-        help='Install this as a Nautilus script')
+        help='Install this script as a Nautilus script')
     argument_parser.add_argument(
         'files',
         type=pathlib.Path,

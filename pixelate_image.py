@@ -6,7 +6,7 @@
 pixelate_image.py
 
 Pixelate a part of an image
-(Tkinter-based GUI assistant supporting Nautilus script integration)
+(Tkinter-based GUI assistant)
 
 """
 
@@ -273,11 +273,11 @@ class UserInterface():
             # check for an image mime type,
             # and show an error dialog and retry
             # if the selected file is not an image
-            file_type = mimetypes.guess_type(file_path)[0] or '(unknown)'
+            file_type = mimetypes.guess_type(file_path)[0]
             if not file_type.startswith('image/'):
                 messagebox.showerror(
                     'Not an image',
-                    f'{file_path.name!r} is a file of type {file_type},'
+                    f'{file_path.name!r} is a file of type {file_type!r},'
                     ' but an image is required.',
                     icon=messagebox.ERROR)
                 initial_dir = str(file_path.parent)
