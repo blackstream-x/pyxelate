@@ -13,7 +13,7 @@ Pixelate a part of an image
 
 import argparse
 import logging
-# import mimetypes
+import mimetypes
 import os
 import pathlib
 # import re
@@ -22,11 +22,12 @@ import tkinter
 # import webbrowser
 
 from tkinter import filedialog
-# from tkinter import messagebox
+from tkinter import messagebox
 # from tkinter import ttk
 
 # local modules
 
+import gui_commons
 import pixelations
 
 #
@@ -72,16 +73,22 @@ PANEL_NAMES = {
 CANVAS_WIDTH = 720
 CANVAS_HEIGHT = 405
 
-ELLIPSE='ellipse'
-RECTANGLE='rectangle'
+ELLIPSE = 'ellipse'
+RECTANGLE = 'rectangle'
 
-ELLIPTIC='elliptic'
-RECTANGULAR='rectangular'
+ELLIPTIC = 'elliptic'
+RECTANGULAR = 'rectangular'
 
 SHAPES = {ELLIPTIC: ELLIPSE, RECTANGULAR: RECTANGLE}
 
+MINIMUM_TILESIZE = 10
+MAXIMUM_TILESIZE = 200
+TILESIZE_INCREMENT = 5
+
 MINIMUM_SELECTION_SIZE = 20
 INITIAL_SELECTION_SIZE = 50
+
+SELECTION_SIZE_INCREMENT = 5
 
 #
 # Helper Functions
@@ -142,103 +149,6 @@ class Namespace(dict):
         del self[name]
 
 
-class ModalDialog(tkinter.Toplevel):
-
-    """Adapted from
-    <https://effbot.org/tkinterbook/tkinter-dialog-windows.htm>
-    """
-
-    def __init__(self,
-                 parent,
-                 content,
-                 title=None,
-                 cancel_button=True):
-        """Create the toplevel window and wait until the dialog is closed"""
-        super().__init__(parent)
-        self.transient(parent)
-        if title:
-            self.title(title)
-        #
-        self.parent = parent
-        self.initial_focus = self
-        self.body = tkinter.Frame(self)
-        self.create_content(content)
-        self.body.grid(padx=5, pady=5, sticky=tkinter.E + tkinter.W)
-        self.create_buttonbox(cancel_button=cancel_button)
-        self.grab_set()
-        self.protocol("WM_DELETE_WINDOW", self.action_cancel)
-        self.initial_focus.focus_set()
-        self.wait_window(self)
-
-    def create_content(self, content):
-        """Add content to body"""
-        for (heading, paragraph) in content:
-            heading_area = tkinter.Label(
-                self.body,
-                text=heading,
-                font=(None, 11, 'bold'),
-                justify=tkinter.LEFT)
-            heading_area.grid(sticky=tkinter.W, padx=5, pady=10)
-            text_area = tkinter.Label(
-                self.body,
-                text=paragraph,
-                justify=tkinter.LEFT)
-            text_area.grid(sticky=tkinter.W, padx=5, pady=5)
-        #
-
-    def create_buttonbox(self, cancel_button=True):
-        """Add standard button box."""
-        box = tkinter.Frame(self)
-        button = tkinter.Button(
-            box,
-            text="OK",
-            width=10,
-            command=self.action_ok,
-            default=tkinter.ACTIVE)
-        button.grid(padx=5, pady=5, row=0, column=0, sticky=tkinter.W)
-        if cancel_button:
-            button = tkinter.Button(
-                box,
-                text="Cancel",
-                width=10,
-                command=self.action_cancel)
-            button.grid(padx=5, pady=5, row=0, column=1, sticky=tkinter.E)
-        #
-        self.bind("<Return>", self.action_ok)
-        box.grid(padx=5, pady=5, sticky=tkinter.E + tkinter.W)
-
-    #
-    # standard button semantics
-
-    def action_ok(self, event=None):
-        """Clean up"""
-        del event
-        self.withdraw()
-        self.update_idletasks()
-        self.action_cancel()
-
-    def action_cancel(self, event=None):
-        """Put focus back to the parent window"""
-        del event
-        self.parent.focus_set()
-        self.destroy()
-
-
-class InfoDialog(ModalDialog):
-
-    """Info dialog,
-    instantiated with a seriess of (heading, paragraph) tuples
-    after the parent window
-    """
-
-    def __init__(self,
-                 parent,
-                 *content,
-                 title=None):
-        """..."""
-        super().__init__(parent, content, title=title, cancel_button=False)
-
-
 class UserInterface():
 
     """GUI using tkinter"""
@@ -268,10 +178,6 @@ class UserInterface():
             image=None,
             original_path=file_path,
             target_path=tkinter.StringVar(),
-            pixel_size=tkinter.IntVar(),
-            shape=tkinter.StringVar(),
-            shape_height=tkinter.IntVar(),
-            shape_width=tkinter.IntVar(),
             saved_height=0,
             panel_display=tkinter.StringVar(),
             trace=False,
@@ -280,7 +186,7 @@ class UserInterface():
                 center_y=tkinter.IntVar(),
                 width=tkinter.IntVar(),
                 height=tkinter.IntVar(),
-                pixelsize=tkinter.IntVar(),
+                tilesize=tkinter.IntVar(),
                 show_preview=tkinter.IntVar(),
                 quadratic=tkinter.IntVar(),
                 shape=tkinter.StringVar()),
@@ -308,7 +214,7 @@ class UserInterface():
         overview_frame = tkinter.Frame(self.main_window)
         file_label = tkinter.Label(
             overview_frame,
-            text='File:')
+            text='Original file:')
         file_label.grid(
             padx=4, pady=2, row=0, column=0, sticky=tkinter.W)
         selected_file = tkinter.Entry(
@@ -342,17 +248,18 @@ class UserInterface():
                         quit_on_empty_choice=False):
         """Choose an image via file dialog"""
         self.variables.current_panel = CHOOSE_IMAGE
+        file_path = self.variables.original_path
         if preset_path:
             if not preset_path.is_dir():
                 initial_dir = str(preset_path.parent)
             #
-        elif self.variables.original_path:
-            initial_dir = str(self.variables.original_path.parent)
+        elif file_path:
+            initial_dir = str(file_path.parent)
         else:
             initial_dir = os.getcwd()
         #
         while True:
-            if not keep_existing or self.variables.original_path is None:
+            if not keep_existing or file_path is None:
                 selected_file = filedialog.askopenfilename(
                     initialdir=initial_dir)
                 if not selected_file:
@@ -361,15 +268,24 @@ class UserInterface():
                     #
                     return
                 #
-                self.variables.original_path = pathlib.Path(
-                    selected_file)
+                file_path = pathlib.Path(selected_file)
             #
-            file_path = self.variables.original_path
-            # TODO: check for an image mime type and retry
+            # check for an image mime type,
+            # and show an error dialog and retry
             # if the selected file is not an image
-            # if not mimetype is imagemimetype: continue
+            file_type = mimetypes.guess_type(file_path)[0] or '(unknown)'
+            if not file_type.startswith('image/'):
+                messagebox.showerror(
+                    'Not an image',
+                    f'{file_path.name!r} is a file of type {file_type},'
+                    ' but an image is required.',
+                    icon=messagebox.ERROR)
+                initial_dir = str(file_path.parent)
+                file_path = None
+                continue
             #
-            # read image data
+            # Set original_path and read image data
+            self.variables.original_path = file_path
             self.variables.image = pixelations.ImagePixelation(
                 file_path, canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
             (im_width, im_height) = self.variables.image.original.size
@@ -380,22 +296,27 @@ class UserInterface():
             # to the image dimensions if necessary
             sel_width = self.variables.px_image.width.get()
             if not sel_width:
-                sel_width = INITIAL_SELECTION_SIZE
+                # Set initial selection width to 20% of image width,
+                # rounded to SELECTION_SIZE_INCREMENT pixels
+                sel_width = max(
+                    INITIAL_SELECTION_SIZE,
+                    round(im_width / (5 * SELECTION_SIZE_INCREMENT))
+                    * SELECTION_SIZE_INCREMENT)
             #
             self.variables.px_image.width.set(min(sel_width, im_width))
             sel_height = self.variables.px_image.height.get()
             if not sel_height:
-                sel_height = INITIAL_SELECTION_SIZE
+                sel_height = sel_width
             #
             self.variables.px_image.height.set(min(sel_height, im_height))
             # set the shape
             if not self.variables.px_image.shape.get():
                 self.variables.px_image.shape.set(ELLIPTIC)
             #
-            # set pixelsize
-            if not self.variables.px_image.pixelsize.get():
-                self.variables.px_image.pixelsize.set(
-                    pixelations.DEFAULT_PIXELSIZE)
+            # set tilesize
+            if not self.variables.px_image.tilesize.get():
+                self.variables.px_image.tilesize.set(
+                    pixelations.DEFAULT_TILESIZE)
             #
             # set the show_preview variable
             self.variables.px_image.show_preview.set(1)
@@ -405,127 +326,114 @@ class UserInterface():
         #
         self.next_panel()
 
-    def do_select_area(self):
-        """..."""
-        ...
-
-    def panel_select_area(self):
-        """Show the image on a canvas and let
-        the user select the area to be pixelated
-        """
-# =============================================================================
-#         label_grid = dict(
-#             column=0,
-#             padx=4,
-#             sticky=tkinter.E)
-#         value_grid = dict(
-#             column=1,
-#             columnspan=3,
-#             padx=4,
-#             sticky=tkinter.W)
-# =============================================================================
+    def show_shape_frame(self):
+        """Show the shape frame"""
         shape_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
-        row1_frame = tkinter.Frame(shape_frame)
-        # chain: \u26d3
-        text1 = tkinter.Label(
-            row1_frame,
+        # First line
+        line_frame = tkinter.Frame(shape_frame)
+        label1 = tkinter.Label(
+            line_frame,
             text='Pixelate the')
         shape_opts = tkinter.OptionMenu(
-            row1_frame,
+            line_frame,
             self.variables.px_image.shape,
             ELLIPTIC,
             RECTANGULAR)
-        text1b = tkinter.Label(
-            row1_frame,
-            text='area selected below')
-        text1.grid(row=0, column=0)
+        label2 = tkinter.Label(
+            line_frame,
+            text='area selected below using tiles measuring')
+        tilesize = tkinter.Spinbox(
+            line_frame,
+            from_=10,
+            to=MAXIMUM_TILESIZE,
+            increment=TILESIZE_INCREMENT,
+            justify=tkinter.RIGHT,
+            state='readonly',
+            width=3,
+            textvariable=self.variables.px_image.tilesize)
+        label3 = tkinter.Label(
+            line_frame,
+            text='pixels each.')
+        label1.grid(row=0, column=0)
         shape_opts.grid(row=0, column=1)
-        text1b.grid(row=0, column=2)
-        row1_frame.grid(sticky=tkinter.W)
-        # Second row
-        row2_frame = tkinter.Frame(shape_frame)
-        text2 = tkinter.Label(
-            row2_frame,
+        label2.grid(row=0, column=2)
+        tilesize.grid(row=0, column=3)
+        label3.grid(row=0, column=4)
+        line_frame.grid(sticky=tkinter.W)
+        # Second line
+        line_frame = tkinter.Frame(shape_frame)
+        label1 = tkinter.Label(
+            line_frame,
             text='Dimensions (width × height):')
         chain = tkinter.Checkbutton(
-            row2_frame,
+            line_frame,
             command=self.toggle_height,
             text='\u26d3',
             variable=self.variables.px_image.quadratic,
             indicatoron=0)
         size_x = tkinter.Spinbox(
-            row2_frame,
+            line_frame,
             from_=MINIMUM_SELECTION_SIZE,
             to=self.variables.image.original.width,
-            increment=5,
+            increment=SELECTION_SIZE_INCREMENT,
             justify=tkinter.RIGHT,
             state='readonly',
             width=4,
             textvariable=self.variables.px_image.width)
-        text3 = tkinter.Label(
-            row2_frame,
+        label2 = tkinter.Label(
+            line_frame,
             text=' × ')
         self.widgets.size_y = tkinter.Spinbox(
-            row2_frame,
+            line_frame,
             from_=MINIMUM_SELECTION_SIZE,
             to=self.variables.image.original.height,
-            increment=5,
+            increment=SELECTION_SIZE_INCREMENT,
             justify=tkinter.RIGHT,
             state='readonly',
             width=4,
             textvariable=self.variables.px_image.height)
-        text2.grid(row=0, column=0)
-        chain.grid(row=0, column=1)
-        size_x.grid(row=0, column=2)
-        text3.grid(row=0, column=3)
-        self.widgets.size_y.grid(row=0, column=4)
-        row2_frame.grid(sticky=tkinter.W)
-        # Third row
-        row3_frame = tkinter.Frame(shape_frame)
-        text4 = tkinter.Label(
-            row3_frame,
-            text='Centered at position X:')
+        label3 = tkinter.Label(
+            line_frame,
+            text=', centered at position X:')
         center_x = tkinter.Spinbox(
-            row3_frame,
+            line_frame,
             from_=0,
             to=self.variables.image.original.width,
             justify=tkinter.RIGHT,
             state='readonly',
             width=4,
             textvariable=self.variables.px_image.center_x)
-        text5 = tkinter.Label(
-            row3_frame,
+        label4 = tkinter.Label(
+            line_frame,
             text=', Y:')
         center_y = tkinter.Spinbox(
-            row3_frame,
+            line_frame,
             from_=0,
             to=self.variables.image.original.height,
             justify=tkinter.RIGHT,
             state='readonly',
             width=4,
             textvariable=self.variables.px_image.center_y)
-        text6 = tkinter.Label(
-            row3_frame,
-            text='Pixelation size:')
-        pixelsize = tkinter.Spinbox(
-            row3_frame,
-            from_=10,
-            to=200,
-            increment=5,
-            justify=tkinter.RIGHT,
-            state='readonly',
-            width=3,
-            textvariable=self.variables.px_image.pixelsize)
-        text4.grid(row=0, column=0)
-        center_x.grid(row=0, column=1)
-        text5.grid(row=0, column=2)
-        center_y.grid(row=0, column=3)
-        text6.grid(row=0, column=4)
-        pixelsize.grid(row=0, column=5)
-        row3_frame.grid(sticky=tkinter.W)
+        label1.grid(row=0, column=0)
+        chain.grid(row=0, column=1)
+        size_x.grid(row=0, column=2)
+        label2.grid(row=0, column=3)
+        self.widgets.size_y.grid(row=0, column=4)
+        label3.grid(row=0, column=5)
+        center_x.grid(row=0, column=6)
+        label4.grid(row=0, column=7)
+        center_y.grid(row=0, column=8)
+        line_frame.grid(sticky=tkinter.W)
         shape_frame.grid(**self.grid_fullwidth)
+        self.toggle_height()
+
+    def panel_select_area(self):
+        """Show the image on a canvas and let
+        the user select the area to be pixelated
+        """
+        self.show_shape_frame()
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
@@ -537,8 +445,6 @@ class UserInterface():
         #
         image_label = tkinter.Label(
             image_frame,
-            #justify=tkinter.LEFT,
-            #anchor=tkinter.W,
             text='Preview (%s)' % scale_factor)
         image_label.grid(sticky=tkinter.W)
         self.widgets.canvas = tkinter.Canvas(
@@ -556,13 +462,6 @@ class UserInterface():
         self.draw_selector()
         self.apply_pixelation()
         self.variables.trace = True
-        logging.info(
-            'Image display ratio: %s',
-            self.variables.image.display_ratio)
-        logging.info(
-            'Image size on canvas: %s x %s',
-            self.variables.tk_image.width(),
-            self.variables.tk_image.height())
         image_frame.grid(**self.grid_fullwidth)
 
     def toggle_height(self):
@@ -579,8 +478,8 @@ class UserInterface():
 
     def apply_pixelation(self):
         """Apply the pixelation to the image and update the preview"""
-        self.variables.image.set_pixelsize(
-            self.variables.px_image.pixelsize.get())
+        self.variables.image.set_tilesize(
+            self.variables.px_image.tilesize.get())
         width = self.variables.px_image.width.get()
         if self.variables.px_image.quadratic.get():
             height = width
@@ -663,7 +562,7 @@ class UserInterface():
         self.variables.drag_data["x"] = event.x
         self.variables.drag_data["y"] = event.y
 
-    def drag_stop(self, event):
+    def drag_stop(self, *unused_event):
         """End drag of an object"""
         # reset the drag information
         self.variables.drag_data["item"] = None
@@ -695,54 +594,59 @@ class UserInterface():
 
     def next_action(self):
         """Execute the next action"""
-        next_index = PHASES.index(self.variables.current_panel) + 1
+        current_index = PHASES.index(self.variables.current_panel)
+        next_index = current_index + 1
         try:
             next_phase = PHASES[next_index]
-        except IndexError:
-            self.variables.errors.append(
-                'Phase number #%s out of range' % next_index)
+        except IndexError as error:
+            raise ValueError(
+                f'Phase number #{next_index} out of range') from error
         #
+        method_display = (
+            f'Action method for phase #{next_index} ({next_phase})')
+        method_name = f'do_{next_phase})'
         try:
-            action_method = getattr(self, 'do_%s' % next_phase)
+            action_method = getattr(self, method_name)
         except AttributeError:
-            self.variables.errors.append(
-                'Action method for phase #%s (%r)'
-                ' has not been defined yet' % (next_index, next_phase))
-        except NotImplementedError:
-            self.variables.errors.append(
-                'Action method for phase #%s (%r)'
-                ' has not been implemented yet' % (next_index, next_phase))
+            logging.warning('%s is undefined', method_display)
         else:
-            self.variables.current_phase = next_phase
-            action_method()
+            try:
+                action_method()
+            except NotImplementedError as error:
+                raise ValueError(
+                    f'{method_display} has not been implemented yet') \
+                    from error
+            #
         #
+        self.variables.current_phase = next_phase
 
     def next_panel(self):
         """Execute the next action and go to the next panel"""
-        self.next_action()
+        try:
+            self.next_action()
+        except ValueError as error:
+            self.variables.errors.append(str(error))
+        #
         self.__show_panel()
 
     def previous_panel(self):
         """Go to the next panel"""
-        phase_index = PHASES.index(self.variables.current_panel)
+        phase_name = self.variables.current_panel
+        phase_index = PHASES.index(phase_name)
+        method_display = (
+            f'Rollback method for phase #{phase_index} ({phase_name})')
+        method_name = f'rollback_{phase_name})'
         try:
-            rollback_method = getattr(
-                self,
-                'rollback_%s' % self.variables.current_panel)
+            rollback_method = getattr(self, method_name)
         except AttributeError:
-            self.variables.errors.append(
-                'Rollback method for phase #%s (%r)'
-                ' has not been defined yet' % (
-                    phase_index, self.variables.current_panel))
+            logging.warning('%s is undefined', method_display)
         else:
             self.variables.current_phase = PHASES[phase_index - 1]
             try:
                 rollback_method()
             except NotImplementedError:
                 self.variables.errors.append(
-                    'Rollback method for phase #%s (%r)'
-                    ' has not been implemented yet' % (
-                        phase_index, self.variables.current_panel))
+                    f'{method_display} has not been implemented yet')
             #
         #
         self.__show_panel()
@@ -752,17 +656,11 @@ class UserInterface():
         del event
         self.main_window.destroy()
 
-    def rollback_select_area(self):
-        """Rollback area selection
-        (probably not useful in this context)
-        """
-        ...
-
     def show_about(self):
         """Show information about the application
         in a modal dialog
         """
-        InfoDialog(
+        gui_commons.InfoDialog(
             self.main_window,
             (SCRIPT_NAME,
              'Version: {0}\nProject homepage: {1}'.format(
@@ -802,9 +700,7 @@ class UserInterface():
                 pass
             #
         #
-        self.widgets.action_area = tkinter.Frame(
-            self.main_window,
-            **self.with_border)
+        self.widgets.action_area = tkinter.Frame(self.main_window)
         try:
             panel_method = getattr(
                 self,

@@ -23,7 +23,7 @@ from PIL import Image, ImageDraw, ImageTk
 #
 
 
-DEFAULT_PIXELSIZE = 10
+DEFAULT_TILESIZE = 10
 DEFAULT_CANVAS_SIZE = (720, 405)
 
 
@@ -93,14 +93,14 @@ def most_frequent_color(image):
     return selected_color
 
 
-def pixelated(original_image, pixelsize=DEFAULT_PIXELSIZE):
+def pixelated(original_image, tilesize=DEFAULT_TILESIZE):
     """Return a copy of the original image, pixelated"""
     original_width = original_image.width
     original_height = original_image.height
-    reduced_width = original_width // pixelsize + 1
-    reduced_height = original_height // pixelsize + 1
-    oversize_width = reduced_width * pixelsize
-    oversize_height = reduced_height * pixelsize
+    reduced_width = original_width // tilesize + 1
+    reduced_height = original_height // tilesize + 1
+    oversize_width = reduced_width * tilesize
+    oversize_height = reduced_height * tilesize
     oversized = Image.new(
         original_image.mode,
         (oversize_width, oversize_height),
@@ -112,7 +112,6 @@ def pixelated(original_image, pixelsize=DEFAULT_PIXELSIZE):
     return oversized.crop((0, 0, original_width, original_height))
 
 
-
 #
 # Classes
 #
@@ -120,7 +119,7 @@ def pixelated(original_image, pixelsize=DEFAULT_PIXELSIZE):
 
 class Borg:
 
-    """Shared state class as documented in
+    """Shared state base class as documented in
     <https://www.oreilly.com/
      library/view/python-cookbook/0596001673/ch05s23.html>
      """
@@ -176,7 +175,7 @@ class ShapesCache(Borg):
         if the limit has been exceeded
         """
         if len(self.__shapes) > self.limit:
-            for key in sorted(self.__last_access)[-self.limit:]:
+            for key in sorted(self.__last_access)[:-self.limit]:
                 del self.__shapes[key]
                 del self.__last_access[key]
             #
@@ -196,16 +195,16 @@ class BasePixelation:
 
     def __init__(self,
                  image_path,
-                 pixelsize=DEFAULT_PIXELSIZE,
+                 tilesize=DEFAULT_TILESIZE,
                  canvas_size=DEFAULT_CANVAS_SIZE):
         """Allocate the internal cache"""
 
         self.__cache = {}
-        self.__pixelsize = 0
+        self.__tilesize = 0
         self.__canvas_size = (0, 0)
         self.__shapes = ShapesCache()
         self.shape_offset = (0, 0)
-        self.set_pixelsize(pixelsize)
+        self.set_tilesize(tilesize)
         self.set_canvas_size(canvas_size)
         self.load_image(image_path)
         #
@@ -227,10 +226,10 @@ class BasePixelation:
         """Load the image"""
         self.__cache[self.kw_orig] = Image.open(str(image_path))
 
-    def set_pixelsize(self, pixelsize):
-        """Set the pixelsize and delete the cached pixelated results"""
-        if self.__pixelsize != pixelsize:
-            self.__pixelsize = pixelsize
+    def set_tilesize(self, tilesize):
+        """Set the tilesize and delete the cached pixelated results"""
+        if self.__tilesize != tilesize:
+            self.__tilesize = tilesize
             self.__cache.pop(self.kw_px_area, None)
             self.__cache.pop(self.kw_result, None)
         #
@@ -264,9 +263,9 @@ class BasePixelation:
         #
 
     @property
-    def pixelsize(self):
+    def tilesize(self):
         """The pixel size"""
-        return self.__pixelsize
+        return self.__tilesize
 
     @property
     def display_ratio(self):
@@ -370,7 +369,7 @@ class ImagePixelation(BasePixelation):
         """Return a copy of the original image,
         fully pixelated
         """
-        return pixelated(self.original, pixelsize=self.pixelsize)
+        return pixelated(self.original, tilesize=self.tilesize)
 
     def get_result(self):
         """Return the result
@@ -400,7 +399,7 @@ class FramePixelation(BasePixelation):
                offset_y,
                offset_x + self.mask_shape.width,
                offset_y + self.mask_shape.height)
-        return pixelated(self.original.crop(box), pixelsize=self.pixelsize)
+        return pixelated(self.original.crop(box), tilesize=self.tilesize)
 
     def get_result(self):
         """Return the result
