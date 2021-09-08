@@ -23,7 +23,7 @@ from PIL import Image, ImageDraw, ImageTk
 #
 
 
-DEFAULT_TILESIZE = 10
+DEFAULT_TILESIZE = 25
 DEFAULT_CANVAS_SIZE = (720, 405)
 
 
@@ -225,6 +225,12 @@ class BasePixelation:
     def load_image(self, image_path):
         """Load the image"""
         self.__cache[self.kw_orig] = Image.open(str(image_path))
+
+    def apply_result(self):
+        """Load the current result as original image"""
+        self.__cache[self.kw_orig] = self.result
+        self.__cache.pop(self.kw_px_area, None)
+        self.__cache.pop(self.kw_result, None)
 
     def set_tilesize(self, tilesize):
         """Set the tilesize and delete the cached pixelated results"""

@@ -35,7 +35,7 @@ SCRIPT_NAME = 'Autoselect pixelation script'
 HOMEPAGE = 'https://github.com/blackstream-x/pyxelate'
 MAIN_WINDOW_TITLE = 'pyxelate: autoselect pixelation script'
 
-SCRIPT_PATH = pathlib.Path(sys.argv[0])
+SCRIPT_PATH = pathlib.Path(os.path.realpath(sys.argv[0]))
 # Follow symlinks
 if SCRIPT_PATH.is_symlink():
     SCRIPT_PATH = SCRIPT_PATH.readlink()

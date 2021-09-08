@@ -16,19 +16,17 @@ import logging
 import mimetypes
 import os
 import pathlib
-# import re
 import sys
 import tkinter
-# import webbrowser
 
 from tkinter import filedialog
 from tkinter import messagebox
-# from tkinter import ttk
 
 # local modules
 
 import gui_commons
 import pixelations
+
 
 #
 # Constants
@@ -39,7 +37,7 @@ SCRIPT_NAME = 'Partially pixelate an image'
 HOMEPAGE = 'https://github.com/blackstream-x/pyxelate'
 MAIN_WINDOW_TITLE = 'pyxelate: partially pixelate an image'
 
-SCRIPT_PATH = pathlib.Path(sys.argv[0])
+SCRIPT_PATH = pathlib.Path(os.path.realpath(sys.argv[0]))
 # Follow symlinks
 if SCRIPT_PATH.is_symlink():
     SCRIPT_PATH = SCRIPT_PATH.readlink()
@@ -89,6 +87,12 @@ MINIMUM_SELECTION_SIZE = 20
 INITIAL_SELECTION_SIZE = 50
 
 SELECTION_SIZE_INCREMENT = 5
+
+IMAGE_FILE_TYPES = [
+    (suffix, mime_type) for (suffix, mime_type)
+    in mimetypes.types_map.items()
+    if mime_type.startswith('image/')]
+
 
 #
 # Helper Functions
@@ -181,6 +185,7 @@ class UserInterface():
             saved_height=0,
             panel_display=tkinter.StringVar(),
             trace=False,
+            file_touched=False,
             px_image=Namespace(
                 center_x=tkinter.IntVar(),
                 center_y=tkinter.IntVar(),
@@ -248,6 +253,8 @@ class UserInterface():
                         quit_on_empty_choice=False):
         """Choose an image via file dialog"""
         self.variables.current_panel = CHOOSE_IMAGE
+        filetypes = [(label, f'*{suffix}') for (suffix, label)
+                     in IMAGE_FILE_TYPES]
         file_path = self.variables.original_path
         if preset_path:
             if not preset_path.is_dir():
@@ -261,7 +268,9 @@ class UserInterface():
         while True:
             if not keep_existing or file_path is None:
                 selected_file = filedialog.askopenfilename(
-                    initialdir=initial_dir)
+                    initialdir=initial_dir,
+                    filetypes=filetypes,
+                    parent=self.main_window)
                 if not selected_file:
                     if quit_on_empty_choice:
                         self.quit()
@@ -284,47 +293,62 @@ class UserInterface():
                 file_path = None
                 continue
             #
+            if self.variables.file_touched:
+                confirmation = messagebox.askyesno(
+                    'Unsaved Changes',
+                    'Discard the chages made to'
+                    f' {self.variables.original_path.name!r}?',
+                    icon=messagebox.WARNING)
+                if not confirmation:
+                    return
+                #
+            #
             # Set original_path and read image data
-            self.variables.original_path = file_path
-            self.variables.image = pixelations.ImagePixelation(
-                file_path, canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
-            (im_width, im_height) = self.variables.image.original.size
-            # center selection
-            self.variables.px_image.center_x.set(im_width // 2)
-            self.variables.px_image.center_y.set(im_height // 2)
-            # set selection sizes and reduce them
-            # to the image dimensions if necessary
-            sel_width = self.variables.px_image.width.get()
-            if not sel_width:
-                # Set initial selection width to 20% of image width,
-                # rounded to SELECTION_SIZE_INCREMENT pixels
-                sel_width = max(
-                    INITIAL_SELECTION_SIZE,
-                    round(im_width / (5 * SELECTION_SIZE_INCREMENT))
-                    * SELECTION_SIZE_INCREMENT)
-            #
-            self.variables.px_image.width.set(min(sel_width, im_width))
-            sel_height = self.variables.px_image.height.get()
-            if not sel_height:
-                sel_height = sel_width
-            #
-            self.variables.px_image.height.set(min(sel_height, im_height))
-            # set the shape
-            if not self.variables.px_image.shape.get():
-                self.variables.px_image.shape.set(ELLIPTIC)
-            #
-            # set tilesize
-            if not self.variables.px_image.tilesize.get():
-                self.variables.px_image.tilesize.set(
-                    pixelations.DEFAULT_TILESIZE)
-            #
-            # set the show_preview variable
-            self.variables.px_image.show_preview.set(1)
-            # set the displayed file name
-            self.variables.file_name.set(file_path.name)
+            self.do_load_image(file_path)
             break
         #
         self.next_panel()
+
+    def do_load_image(self, file_path):
+        """Load the image"""
+        self.variables.original_path = file_path
+        self.variables.image = pixelations.ImagePixelation(
+            file_path, canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+        (im_width, im_height) = self.variables.image.original.size
+        # center selection
+        self.variables.px_image.center_x.set(im_width // 2)
+        self.variables.px_image.center_y.set(im_height // 2)
+        # set selection sizes and reduce them
+        # to the image dimensions if necessary
+        sel_width = self.variables.px_image.width.get()
+        if not sel_width:
+            # Set initial selection width to 20% of image width,
+            # rounded to SELECTION_SIZE_INCREMENT pixels
+            sel_width = max(
+                INITIAL_SELECTION_SIZE,
+                round(im_width / (5 * SELECTION_SIZE_INCREMENT))
+                * SELECTION_SIZE_INCREMENT)
+        #
+        self.variables.px_image.width.set(min(sel_width, im_width))
+        sel_height = self.variables.px_image.height.get()
+        if not sel_height:
+            sel_height = sel_width
+        #
+        self.variables.px_image.height.set(min(sel_height, im_height))
+        # set the shape
+        if not self.variables.px_image.shape.get():
+            self.variables.px_image.shape.set(ELLIPTIC)
+        #
+        # set tilesize
+        if not self.variables.px_image.tilesize.get():
+            self.variables.px_image.tilesize.set(
+                pixelations.DEFAULT_TILESIZE)
+        #
+        # set the show_preview variable
+        self.variables.px_image.show_preview.set(1)
+        # set the displayed file name
+        self.variables.file_name.set(file_path.name)
+        self.variables.file_touched = False
 
     def show_shape_frame(self):
         """Show the shape frame"""
@@ -429,6 +453,28 @@ class UserInterface():
         shape_frame.grid(**self.grid_fullwidth)
         self.toggle_height()
 
+    def do_save_file(self):
+        """Save as the selected file"""
+        original_suffix = self.variables.original_path.suffix
+        filetypes = [
+            (mimetypes.types_map[original_suffix], f'*{original_suffix}')]
+        filetypes.extend(
+            [(label, f'*{suffix}') for (suffix, label)
+             in IMAGE_FILE_TYPES if suffix != original_suffix])
+        selected_file = filedialog.asksaveasfilename(
+            initialdir=str(self.variables.original_path.parent),
+            defaultextension=original_suffix,
+            filetypes=filetypes,
+            parent=self.main_window,
+            title='Save pixelated image as…')
+        if not selected_file:
+            return
+        #
+        logging.info('Saving the file as %r', selected_file)
+        #  save the file and reset the "touched" flag
+        self.variables.image.result.save(selected_file)
+        self.variables.file_touched = False
+
     def panel_select_area(self):
         """Show the image on a canvas and let
         the user select the area to be pixelated
@@ -465,7 +511,7 @@ class UserInterface():
         image_frame.grid(**self.grid_fullwidth)
 
     def toggle_height(self):
-        """Toggle height spinbox to follor width"""
+        """Toggle height spinbox to follow width"""
         if self.variables.px_image.quadratic.get():
             self.widgets.size_y.config(
                 state=tkinter.DISABLED,
@@ -551,6 +597,7 @@ class UserInterface():
     def apply_changes(self, *unused_arguments):
         """Apply changes if trace is active"""
         if self.variables.trace:
+            self.variables.file_touched = True
             self.apply_pixelation()
             self.draw_selector()
         #
@@ -577,6 +624,7 @@ class UserInterface():
         self.variables.trace = False
         self.variables.px_image.center_x.set(center_x)
         self.variables.px_image.center_y.set(center_y)
+        self.variables.file_touched = True
         self.apply_pixelation()
         self.variables.trace = True
 
@@ -654,6 +702,16 @@ class UserInterface():
     def quit(self, event=None):
         """Exit the application"""
         del event
+        if self.variables.file_touched:
+            confirmation = messagebox.askyesno(
+                'Unsaved Changes',
+                'Discard the chages made to'
+                f' {self.variables.original_path.name!r}?',
+                icon=messagebox.WARNING)
+            if not confirmation:
+                return
+            #
+        #
         self.main_window.destroy()
 
     def show_about(self):
@@ -733,18 +791,6 @@ class UserInterface():
             **self.with_border)
         #
         buttons_grid = dict(padx=5, pady=5, row=0)
-        if self.variables.current_phase in ():
-            previous_button_state = tkinter.NORMAL
-        else:
-            previous_button_state = tkinter.DISABLED
-        #
-        previous_button = tkinter.Button(
-            self.widgets.buttons_area,
-            text='\u25c1 Previous',
-            command=self.previous_panel,
-            state=previous_button_state)
-        previous_button.grid(column=0, sticky=tkinter.W, **buttons_grid)
-        #
         if self.variables.disable_next_button or \
                 self.variables.current_phase == SELECT_AREA:
             next_button_state = tkinter.DISABLED
@@ -757,18 +803,28 @@ class UserInterface():
             text='\u25b7 Next',
             command=self.next_panel,
             state=next_button_state)
-        next_button.grid(column=1, sticky=tkinter.W, **buttons_grid)
+        next_button.grid(column=0, sticky=tkinter.W, **buttons_grid)
+        apply_button = tkinter.Button(
+            self.widgets.buttons_area,
+            text='Apply and continue',
+            command=self.variables.image.apply_result)
+        apply_button.grid(column=1, sticky=tkinter.W, **buttons_grid)
+        save_button = tkinter.Button(
+            self.widgets.buttons_area,
+            text='Save as…',
+            command=self.do_save_file)
+        save_button.grid(column=2, sticky=tkinter.W, **buttons_grid)
         about_button = tkinter.Button(
             self.widgets.buttons_area,
             text='About…',
             command=self.show_about)
-        about_button.grid(column=3, sticky=tkinter.E, **buttons_grid)
+        about_button.grid(column=4, sticky=tkinter.E, **buttons_grid)
         quit_button = tkinter.Button(
             self.widgets.buttons_area,
             text='Quit',
             command=self.quit)
-        quit_button.grid(column=4, sticky=tkinter.E, **buttons_grid)
-        self.widgets.buttons_area.columnconfigure(2, weight=100)
+        quit_button.grid(column=5, sticky=tkinter.E, **buttons_grid)
+        self.widgets.buttons_area.columnconfigure(3, weight=100)
         self.widgets.buttons_area.grid(**self.grid_fullwidth)
 
 
