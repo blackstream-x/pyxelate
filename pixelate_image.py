@@ -508,6 +508,13 @@ class UserInterface():
         self.draw_selector()
         self.apply_pixelation()
         self.variables.trace = True
+        # add bindings to create a new selector
+        self.widgets.canvas.tag_bind(
+            "image", "<ButtonPress-1>", self.drag_size_start)
+        self.widgets.canvas.tag_bind(
+            "image", "<ButtonRelease-1>", self.drag_size_stop)
+        self.widgets.canvas.tag_bind(
+            "image", "<B1-Motion>", self.drag_size)
         image_frame.grid(**self.grid_fullwidth)
 
     def toggle_height(self):
@@ -639,6 +646,54 @@ class UserInterface():
         # record the new position
         self.variables.drag_data["x"] = event.x
         self.variables.drag_data["y"] = event.y
+
+    def drag_size_start(self, event):
+        """Begining dragging for a new size"""
+        # record the item and its location
+        self.variables.drag_data["item"] = 'size'
+        self.variables.drag_data["x"] = event.x
+        self.variables.drag_data["y"] = event.y
+
+    def drag_size_stop(self, *unused_event):
+        """End drag for a new size"""
+        self.widgets.canvas.delete('size')
+        bbox = self.widgets.canvas.bbox('size')
+        center_x = self.variables.image.from_display_size(
+            (bbox[0] + bbox[2]) // 2)
+        center_y = self.variables.image.from_display_size(
+            (bbox[1] + bbox[3]) // 2)
+        width = self.variables.image.from_display_size(bbox[2] - bbox[0])
+        height = self.variables.image.from_display_size(bbox[3] - bbox[1])
+        self.variables.trace = False
+        self.variables.px_image.center_x.set(center_x)
+        self.variables.px_image.center_y.set(center_y)
+        self.variables.px_image.width.set(width)
+        self.variables.px_image.height.set(height)
+        self.variables.file_touched = True
+        self.draw_selector()
+        self.apply_pixelation()
+        self.variables.trace = True
+
+    def drag_size(self, event):
+        """Drag the size selector"""
+        current_x = event.x
+        current_y = event.y
+        [left, right] = sorted((current_x, self.variables.drag_data["x"]))
+        [top, bottom] = sorted((current_y, self.variables.drag_data["y"]))
+        self.variables.px_display.shape = \
+            self.variables.px_image.shape.get()
+        #
+        # logging.info('Display: %r', self.variables.px_display.items())
+        self.widgets.canvas.delete('size')
+        if self.variables.px_display.shape == ELLIPTIC:
+            create_widget = self.widgets.canvas.create_oval
+        elif self.variables.px_display.shape == RECTANGULAR:
+            create_widget = self.widgets.canvas.create_rectangle
+        #
+        create_widget(
+            left, top, right, bottom,
+            outline='blue',
+            tags='size')
 
     def next_action(self):
         """Execute the next action"""
