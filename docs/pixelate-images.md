@@ -1,7 +1,7 @@
 # Pixelate images
 
-The [pixelate_images.py](../pixelate_images.py) script provides a GUI
-to partially pixelate images.
+The [pixelate_image.py](../pixelate_image.py) script provides a GUI
+to partially pixelate the selected image.
 
 ## Usage
 
