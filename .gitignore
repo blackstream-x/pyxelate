@@ -127,5 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-devnotes.md
+
+# Local test data directory
 testdata/
+
