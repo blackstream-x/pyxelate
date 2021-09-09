@@ -656,7 +656,6 @@ class UserInterface():
 
     def drag_size_stop(self, *unused_event):
         """End drag for a new size"""
-        self.widgets.canvas.delete('size')
         bbox = self.widgets.canvas.bbox('size')
         center_x = self.variables.image.from_display_size(
             (bbox[0] + bbox[2]) // 2)
@@ -670,6 +669,7 @@ class UserInterface():
         self.variables.px_image.width.set(width)
         self.variables.px_image.height.set(height)
         self.variables.file_touched = True
+        self.widgets.canvas.delete('size')
         self.draw_selector()
         self.apply_pixelation()
         self.variables.trace = True
