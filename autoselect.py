@@ -19,7 +19,6 @@ import logging
 import mimetypes
 import os
 import pathlib
-# import re
 import subprocess
 import sys
 
@@ -54,20 +53,10 @@ try:
 except OSError as error:
     VERSION = '(Version file is missing: %s)' % error
 
+NAUTILUS_SCRIPTS = pathlib.Path('.local/share/nautilus/scripts')
+
+RETURNCODE_OK = 0
 RETURNCODE_ERROR = 1
-
-
-#
-# Helper Functions
-#
-
-
-...
-
-
-#
-# Classes
-#
 
 
 #
@@ -77,10 +66,49 @@ RETURNCODE_ERROR = 1
 
 def install_nautilus_script(name):
     """Install this script as a nautilus script"""
-    # TODO: ln -s $(readlink -f autoselect.py)
-    # ~/.local/share/nautilus/scripts/{name}
-    # or os.symlink
-    raise NotImplementedError
+    target_directory = pathlib.Path.home() / NAUTILUS_SCRIPTS
+    if not target_directory.is_dir():
+        if target_directory.parent.is_dir():
+            target_directory.mkdir()
+        else:
+            logging.error('Nautilus probably not available.')
+            return RETURNCODE_ERROR
+        #
+    #
+    target_link_path = target_directory / name
+    logging.debug('Target link path: %s', target_link_path)
+    if target_link_path.exists():
+        logging.error('Nautilus script %r already exists!', name)
+        return RETURNCODE_ERROR
+    #
+    for single_path in target_directory.glob('*'):
+        if single_path.is_symlink():
+            logging.debug('Found symlink: %s', single_path)
+            if single_path.readlink() == SCRIPT_PATH:
+                logging.warning(
+                    'Nautilus script already installed as %r',
+                    single_path.name)
+                answer = input(
+                    f'Rename that to {name!r} (yes/no)? ').lower() or 'no'
+                if 'yes'.startswith(answer):
+                    logging.info('Renaming %r to %r.', single_path.name, name)
+                    os.rename(single_path, target_link_path)
+                    return RETURNCODE_OK
+                #
+                if 'no'.startswith(answer):
+                    logging.info('Leaving everything as is.')
+                    return RETURNCODE_OK
+                #
+                logging.warning(
+                    'Interpreting %r as %r, leaving everything as is.',
+                    answer, 'no')
+                return RETURNCODE_ERROR
+            #
+        #
+    #
+    os.symlink(SCRIPT_PATH, target_link_path)
+    logging.info('Nautilus script has been installed as %r', name)
+    return RETURNCODE_OK
 
 
 def start_matching_script(file_path):
@@ -127,8 +155,10 @@ def __get_arguments():
     argument_parser.add_argument(
         '--install-nautilus-script',
         nargs='?',
+        metavar='NAME',
         const='Pixelate',
-        help='Install this script as a Nautilus script')
+        help='Install this script as Nautilus script %(metavar)s'
+        ' (default: %(const)s)')
     argument_parser.add_argument(
         'files',
         type=pathlib.Path,
@@ -139,8 +169,11 @@ def __get_arguments():
 def main(arguments):
     """Main script function"""
     logging.basicConfig(
-        format='%(levelname)-8s\u2551 %(funcName)s → %(message)s',
+        format='%(levelname)-8s\u2551 %(message)s',
         level=arguments.loglevel)
+    if arguments.install_nautilus_script:
+        return install_nautilus_script(arguments.install_nautilus_script)
+    #
     try:
         selected_file = arguments.files[0]
     except IndexError:
@@ -168,7 +201,8 @@ def main(arguments):
     if selected_file:
         return start_matching_script(selected_file)
     #
-    return 1
+    logging.error('No (existing) file selected.')
+    return RETURNCODE_ERROR
 
 
 if __name__ == '__main__':
