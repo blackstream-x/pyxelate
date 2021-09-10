@@ -17,6 +17,7 @@ import mimetypes
 import os
 import pathlib
 import sys
+import time
 import tkinter
 
 from tkinter import filedialog
@@ -74,8 +75,8 @@ CANVAS_HEIGHT = 405
 ELLIPSE = 'ellipse'
 RECTANGLE = 'rectangle'
 
-ELLIPTIC = 'elliptic'
-RECTANGULAR = 'rectangular'
+ELLIPTIC = '\u2b2d elliptic'
+RECTANGULAR = '\u25ad rectangular'
 
 SHAPES = {ELLIPTIC: ELLIPSE, RECTANGULAR: RECTANGLE}
 
@@ -91,6 +92,8 @@ IMAGE_FILE_TYPES = [
     in mimetypes.types_map.items()
     if mime_type.startswith('image/')]
 
+POSSIBLE_SELECTION_COLORS = (
+    'red', 'white', 'black', 'green', 'blue', 'cyan', 'yellow', 'magenta')
 
 #
 # Helper Functions
@@ -184,6 +187,7 @@ class UserInterface():
             panel_display=tkinter.StringVar(),
             trace=False,
             file_touched=False,
+            undo_buffer=[],
             px_image=Namespace(
                 center_x=tkinter.IntVar(),
                 center_y=tkinter.IntVar(),
@@ -198,7 +202,7 @@ class UserInterface():
                 center_y=0,
                 width=0,
                 height=0,
-                color='red',
+                color=tkinter.StringVar(),
                 shape=''),
             drag_data=Namespace(
                 x=0,
@@ -210,13 +214,14 @@ class UserInterface():
         for (_, variable) in self.variables.px_image.items():
             variable.trace_add('write', self.trigger_selection_change)
         #
-        # … to the show_preview variable
-        #self.variables.px_image.show_preview.trace_add(
-        #    'write', self.trigger_preview_toggle)
         # TODO: … to the disable_buttons variables
         # for (_, variable) in self.variables.disable_buttons.items():
         #     variable.trace_add('write', self.trigger_button_states)
         #
+        # … to the px_display.color variable
+        self.variables.px_display.color.set('red')
+        self.variables.px_display.color.trace_add(
+            'write', self.trigger_selector_redraw)
         #
         self.widgets = Namespace(
             action_area=None,
@@ -252,6 +257,7 @@ class UserInterface():
         self.do_choose_image(
             keep_existing=True,
             quit_on_empty_choice=True)
+        self.main_window.protocol('WM_DELETE_WINDOW', self.quit)
         self.main_window.mainloop()
 
     def do_choose_image(self,
@@ -355,11 +361,21 @@ class UserInterface():
         self.variables.file_name.set(file_path.name)
         self.variables.file_touched = False
 
-    def do_apply_changes(self):
+    def do_apply_changes(self, interactive_mode=True):
         """Apply changes to the image"""
-        self.variables.image.apply_result()
         # TODO: record the position, shape, size,
-        # and tilesize of the selection
+        # and tilesize of the selection, and append that together with
+        # the current image as a tuple to the undo buffer
+        #
+        # Visual feedback in interactive mode
+        if interactive_mode:
+            self.draw_selector(stipple='gray75')
+            self.main_window.update_idletasks()
+            time.sleep(.2)
+            self.draw_selector()
+        #
+        self.variables.image.set_original(self.variables.image.result)
+        # TODO: deactivate "Apply" button
         self.trigger_preview_toggle()
 
     def do_save_file(self):
@@ -391,6 +407,11 @@ class UserInterface():
         #  save the file and reset the "touched" flag
         # TODO: save the applied chages only (use original instead of result)
         self.variables.image.result.save(selected_file)
+        self.variables.original_path = pathlib.Path(selected_file)
+        self.variables.file_name.set(self.variables.original_path.name)
+        # TODO: Clear undo buffer
+        self.variables.undo_buffer.clear()
+        # self.update_ ??? FIXME
         self.variables.file_touched = False
         return True
 
@@ -505,10 +526,10 @@ class UserInterface():
             **self.with_border)
         line_frame = tkinter.Frame(image_frame)
         if self.variables.image.display_ratio > 1:
-            scale_factor = 'Scaled down by factor %r' % float(
+            scale_factor = 'Scaled down by factor %r \u2502 ' % float(
                 self.variables.image.display_ratio)
         else:
-            scale_factor = 'Original size'
+            scale_factor = 'Original size \u2502 '
         #
         label1 = tkinter.Label(
             line_frame,
@@ -517,11 +538,20 @@ class UserInterface():
             line_frame,
             command=self.show_image,
             padx=5, pady=5,
-            text='Preview not-yet-applied pixelation',
+            text='Preview pixelation',
             variable=self.variables.px_image.show_preview,
             indicatoron=0)
+        label2 = tkinter.Label(
+            line_frame,
+            text=' \u2502 Selection outline color:')
+        color_opts = tkinter.OptionMenu(
+            line_frame,
+            self.variables.px_display.color,
+            *POSSIBLE_SELECTION_COLORS)
         label1.grid(row=0, column=0, sticky=tkinter.W)
         preview_button.grid(row=0, column=1)
+        label2.grid(row=0, column=2)
+        color_opts.grid(row=0, column=3)
         line_frame.grid(sticky=tkinter.W)
         self.widgets.canvas = tkinter.Canvas(
             image_frame,
@@ -593,7 +623,7 @@ class UserInterface():
             tags='image')
         self.widgets.canvas.tag_lower('image', 'selector')
 
-    def draw_selector(self):
+    def draw_selector(self, stipple='gray12'):
         """Draw the pixelation selector on the canvas,
         its coordinates determined by the px_* variables
         """
@@ -620,11 +650,12 @@ class UserInterface():
         elif self.variables.px_display.shape == RECTANGULAR:
             create_widget = self.widgets.canvas.create_rectangle
         #
+        current_color = self.variables.px_display.color.get()
         create_widget(
             left, top, right, bottom,
-            outline=self.variables.px_display.color,
-            fill=self.variables.px_display.color,
-            stipple='gray12',
+            outline=current_color,
+            fill=current_color,
+            stipple=stipple,
             tags='selector')
         # add bindings to drag the selector over the image
         self.widgets.canvas.tag_bind(
@@ -646,6 +677,14 @@ class UserInterface():
         """Trigger preview update"""
         try:
             self.show_image()
+        except AttributeError as error:
+            logging.warning('%s', error)
+        #
+
+    def trigger_selector_redraw(self, *unused_arguments):
+        """Trigger redrawing of the selector"""
+        try:
+            self.draw_selector()
         except AttributeError as error:
             logging.warning('%s', error)
         #
@@ -754,15 +793,21 @@ class UserInterface():
         #
         # logging.info('Display: %r', self.variables.px_display.items())
         self.widgets.canvas.delete('size')
+        outer_dash = (1, 1)
         if self.variables.px_display.shape == ELLIPTIC:
-            create_widget = self.widgets.canvas.create_oval
-        elif self.variables.px_display.shape == RECTANGULAR:
-            create_widget = self.widgets.canvas.create_rectangle
+            outer_dash = (5, 5)
         #
-        create_widget(
+        self.widgets.canvas.create_rectangle(
             left, top, right, bottom,
+            dash=outer_dash,
             outline='blue',
             tags='size')
+        if self.variables.px_display.shape == ELLIPTIC:
+            self.widgets.canvas.create_oval(
+                left, top, right, bottom,
+                dash=(1, 1),
+                outline='blue',
+                tags='size')
 
     def next_action(self):
         """Execute the next action"""
@@ -915,37 +960,39 @@ class UserInterface():
             **self.with_border)
         #
         buttons_grid = dict(padx=5, pady=5, row=0)
-        if self.variables.disable_next_button or \
-                self.variables.current_phase == SELECT_AREA:
-            next_button_state = tkinter.DISABLED
-        else:
-            next_button_state = tkinter.NORMAL
-        #
-        self.variables.disable_next_button = False
-        next_button = tkinter.Button(
+# =============================================================================
+#         if self.variables.disable_next_button or \
+#                 self.variables.current_phase == SELECT_AREA:
+#             next_button_state = tkinter.DISABLED
+#         else:
+#             next_button_state = tkinter.NORMAL
+#         #
+#         self.variables.disable_next_button = False
+# =============================================================================
+        undo_button = tkinter.Button(
             self.widgets.buttons_area,
-            text='\u25b7 Next',
-            command=self.next_panel,
-            state=next_button_state)
-        next_button.grid(column=0, sticky=tkinter.W, **buttons_grid)
+            text='\u21b6 Undo',
+            command=self.next_panel)
+        undo_button.grid(column=0, sticky=tkinter.W, **buttons_grid)
+        logging.info('Undo button state: %r', undo_button.cget('state'))
         apply_button = tkinter.Button(
             self.widgets.buttons_area,
-            text='Apply',
+            text='\u2713 Apply',
             command=self.do_apply_changes)
         apply_button.grid(column=1, sticky=tkinter.W, **buttons_grid)
         save_button = tkinter.Button(
             self.widgets.buttons_area,
-            text='Save',
+            text='\U0001f5ab Save',
             command=self.do_save_file)
         save_button.grid(column=2, sticky=tkinter.W, **buttons_grid)
         about_button = tkinter.Button(
             self.widgets.buttons_area,
-            text='About…',
+            text='\u24d8 About',
             command=self.show_about)
         about_button.grid(column=4, sticky=tkinter.E, **buttons_grid)
         quit_button = tkinter.Button(
             self.widgets.buttons_area,
-            text='Quit',
+            text='\u23fb Quit',
             command=self.quit)
         quit_button.grid(column=5, sticky=tkinter.E, **buttons_grid)
         self.widgets.buttons_area.columnconfigure(3, weight=100)

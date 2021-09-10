@@ -224,11 +224,11 @@ class BasePixelation:
 
     def load_image(self, image_path):
         """Load the image"""
-        self.__cache[self.kw_orig] = Image.open(str(image_path))
+        self.set_original(Image.open(str(image_path)))
 
-    def apply_result(self):
-        """Load the current result as original image"""
-        self.__cache[self.kw_orig] = self.result
+    def set_original(self, image):
+        """Set the provided image as original image"""
+        self.__cache[self.kw_orig] = image
         self.__cache.pop(self.kw_px_area, None)
         self.__cache.pop(self.kw_result, None)
 
