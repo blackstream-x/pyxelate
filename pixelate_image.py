@@ -95,6 +95,8 @@ IMAGE_FILE_TYPES = [
 POSSIBLE_SELECTION_COLORS = (
     'red', 'white', 'black', 'green', 'blue', 'cyan', 'yellow', 'magenta')
 
+UNDO_SIZE = 20
+
 #
 # Helper Functions
 #
@@ -154,7 +156,44 @@ class Namespace(dict):
         del self[name]
 
 
-class UserInterface():
+class FrozenSelection:
+
+    """Store a selection state"""
+
+    variables = ('center_x', 'center_y', 'width', 'height',
+                 'shape', 'quadratic', 'tilesize')
+
+    def __init__(self, px_image):
+        """Initialize values from the variables in the
+        provided px_image Namespace of tkinter variables
+        """
+        self.original_values = {key: px_image[key].get()
+                                for key in self.variables}
+        self.effective_values = dict(self.original_values)
+        quadratic = self.effective_values.pop('quadratic')
+        if quadratic:
+            self.effective_values['height'] = self.effective_values['width']
+        #
+
+    def restore_to(self, px_image):
+        """Restore values to the variables in the
+        provided px_image Namespace of tkinter variables
+        """
+        for (key, value) in self.original_values.items():
+            px_image[key].set(value)
+        #
+
+    def __eq__(self, other):
+        """Return True if the effective values are equal"""
+        for (key, value) in self.effective_values.items():
+            if value != other.effective_values[key]:
+                return False
+            #
+        #
+        return True
+
+
+class UserInterface:
 
     """GUI using tkinter"""
 
@@ -363,9 +402,14 @@ class UserInterface():
 
     def do_apply_changes(self, interactive_mode=True):
         """Apply changes to the image"""
-        # TODO: record the position, shape, size,
+        # Rrecord the position, shape, size,
         # and tilesize of the selection, and append that together with
         # the current image as a tuple to the undo buffer
+        self.variables.undo_buffer.append(
+            (self.variables.image.original,
+             FrozenSelection(self.variables.px_image)))
+        if len(self.variables.undo_buffer) > UNDO_SIZE:
+            del self.variables.undo_buffer[:-UNDO_SIZE]
         #
         # Visual feedback in interactive mode
         if interactive_mode:
@@ -382,12 +426,36 @@ class UserInterface():
         """Save as the selected file,
         return True if the file was saved
         """
-        # TODO: compare the position, shape, size,
+        # Compare the position, shape, size,
         # and tilesize of the selection
         # with the ones recorded at applying time.
         # If they differ, and the preview is active, ask
         # if the currently previewed pixelation should be applied
         # (WYSIWYG approach)
+        try:
+            last_applied_selection = self.variables.undo_buffer[-1][1]
+        except IndexError:
+            # Empty undo buffer
+            undo_buffer_empty = True
+        else:
+            undo_buffer_empty = False
+            current_selection = FrozenSelection(self.variables.px_image)
+            if current_selection != last_applied_selection:
+                self.variables.file_touched = True
+            #
+        #
+        if self.variables.file_touched and \
+                self.variables.px_image.show_preview.get():
+            if messagebox.askyesno(
+                    'Not yet applied changes',
+                    'Pixelate the current selection before saving?'):
+                self.do_apply_changes(interactive_mode=False)
+            elif undo_buffer_empty:
+                messagebox.showinfo(
+                    'Image unchanged', 'Nothing to save in this case.')
+                return False
+            #
+        #
         original_suffix = self.variables.original_path.suffix
         filetypes = [
             (mimetypes.types_map[original_suffix], f'*{original_suffix}')]
@@ -405,13 +473,12 @@ class UserInterface():
         #
         logging.info('Saving the file as %r', selected_file)
         #  save the file and reset the "touched" flag
-        # TODO: save the applied chages only (use original instead of result)
-        self.variables.image.result.save(selected_file)
+        self.variables.image.original.save(selected_file)
         self.variables.original_path = pathlib.Path(selected_file)
         self.variables.file_name.set(self.variables.original_path.name)
-        # TODO: Clear undo buffer
         self.variables.undo_buffer.clear()
         # self.update_ ??? FIXME
+        # TODO: deactivate "Save" button
         self.variables.file_touched = False
         return True
 
@@ -543,7 +610,7 @@ class UserInterface():
             indicatoron=0)
         label2 = tkinter.Label(
             line_frame,
-            text=' \u2502 Selection outline color:')
+            text=' \u2502¸ Selection outline color:')
         color_opts = tkinter.OptionMenu(
             line_frame,
             self.variables.px_display.color,
@@ -871,14 +938,28 @@ class UserInterface():
     def quit(self, event=None):
         """Exit the application"""
         del event
+        try:
+            last_applied_selection = self.variables.undo_buffer[-1][1]
+        except IndexError:
+            # Empty undo buffer
+            pass
+        else:
+            current_selection = FrozenSelection(self.variables.px_image)
+            if current_selection != last_applied_selection and \
+                    self.variables.px_image.show_preview.get():
+                self.variables.file_touched = True
+            #
+        #
         if self.variables.file_touched:
-            confirmation = messagebox.askyesno(
-                'Unsaved Changes',
-                'Discard the chages made to'
-                f' {self.variables.original_path.name!r}?',
-                icon=messagebox.WARNING)
-            if not confirmation:
-                return
+            if messagebox.askyesno('Unsaved Changes', 'Save your changes?'):
+                if not self.do_save_file():
+                    if not messagebox.askokcancel(
+                            'Changes not saved!',
+                            'Really exit without saving?',
+                            default=messagebox.CANCEL):
+                        return
+                    #
+                #
             #
         #
         self.main_window.destroy()
