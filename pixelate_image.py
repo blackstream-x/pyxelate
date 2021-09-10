@@ -86,8 +86,6 @@ TILESIZE_INCREMENT = 5
 MINIMUM_SELECTION_SIZE = 20
 INITIAL_SELECTION_SIZE = 50
 
-SELECTION_SIZE_INCREMENT = 5
-
 IMAGE_FILE_TYPES = [
     (suffix, mime_type) for (suffix, mime_type)
     in mimetypes.types_map.items()
@@ -207,9 +205,18 @@ class UserInterface():
                 y=0,
                 item=None),
             )
-        # Trace changes to px_image variables
+        # Trace changes:
+        # … to px_image variables
         for (_, variable) in self.variables.px_image.items():
-            variable.trace_add('write', self.apply_changes)
+            variable.trace_add('write', self.trigger_selection_change)
+        #
+        # … to the show_preview variable
+        #self.variables.px_image.show_preview.trace_add(
+        #    'write', self.trigger_preview_toggle)
+        # TODO: … to the disable_buttons variables
+        # for (_, variable) in self.variables.disable_buttons.items():
+        #     variable.trace_add('write', self.trigger_button_states)
+        #
         #
         self.widgets = Namespace(
             action_area=None,
@@ -322,12 +329,10 @@ class UserInterface():
         # to the image dimensions if necessary
         sel_width = self.variables.px_image.width.get()
         if not sel_width:
-            # Set initial selection width to 20% of image width,
-            # rounded to SELECTION_SIZE_INCREMENT pixels
+            # Set initial selection width to 20% of image width
             sel_width = max(
                 INITIAL_SELECTION_SIZE,
-                round(im_width / (5 * SELECTION_SIZE_INCREMENT))
-                * SELECTION_SIZE_INCREMENT)
+                round(im_width / 5))
         #
         self.variables.px_image.width.set(min(sel_width, im_width))
         sel_height = self.variables.px_image.height.get()
@@ -344,11 +349,50 @@ class UserInterface():
             self.variables.px_image.tilesize.set(
                 pixelations.DEFAULT_TILESIZE)
         #
-        # set the show_preview variable
+        # set the show_preview variable by default
         self.variables.px_image.show_preview.set(1)
         # set the displayed file name
         self.variables.file_name.set(file_path.name)
         self.variables.file_touched = False
+
+    def do_apply_changes(self):
+        """Apply changes to the image"""
+        self.variables.image.apply_result()
+        # TODO: record the position, shape, size,
+        # and tilesize of the selection
+        self.trigger_preview_toggle()
+
+    def do_save_file(self):
+        """Save as the selected file,
+        return True if the file was saved
+        """
+        # TODO: compare the position, shape, size,
+        # and tilesize of the selection
+        # with the ones recorded at applying time.
+        # If they differ, and the preview is active, ask
+        # if the currently previewed pixelation should be applied
+        # (WYSIWYG approach)
+        original_suffix = self.variables.original_path.suffix
+        filetypes = [
+            (mimetypes.types_map[original_suffix], f'*{original_suffix}')]
+        filetypes.extend(
+            [(label, f'*{suffix}') for (suffix, label)
+             in IMAGE_FILE_TYPES if suffix != original_suffix])
+        selected_file = filedialog.asksaveasfilename(
+            initialdir=str(self.variables.original_path.parent),
+            defaultextension=original_suffix,
+            filetypes=filetypes,
+            parent=self.main_window,
+            title='Save pixelated image as…')
+        if not selected_file:
+            return False
+        #
+        logging.info('Saving the file as %r', selected_file)
+        #  save the file and reset the "touched" flag
+        # TODO: save the applied chages only (use original instead of result)
+        self.variables.image.result.save(selected_file)
+        self.variables.file_touched = False
+        return True
 
     def show_shape_frame(self):
         """Show the shape frame"""
@@ -401,7 +445,6 @@ class UserInterface():
             line_frame,
             from_=MINIMUM_SELECTION_SIZE,
             to=self.variables.image.original.width,
-            increment=SELECTION_SIZE_INCREMENT,
             justify=tkinter.RIGHT,
             state='readonly',
             width=4,
@@ -413,7 +456,6 @@ class UserInterface():
             line_frame,
             from_=MINIMUM_SELECTION_SIZE,
             to=self.variables.image.original.height,
-            increment=SELECTION_SIZE_INCREMENT,
             justify=tkinter.RIGHT,
             state='readonly',
             width=4,
@@ -453,28 +495,6 @@ class UserInterface():
         shape_frame.grid(**self.grid_fullwidth)
         self.toggle_height()
 
-    def do_save_file(self):
-        """Save as the selected file"""
-        original_suffix = self.variables.original_path.suffix
-        filetypes = [
-            (mimetypes.types_map[original_suffix], f'*{original_suffix}')]
-        filetypes.extend(
-            [(label, f'*{suffix}') for (suffix, label)
-             in IMAGE_FILE_TYPES if suffix != original_suffix])
-        selected_file = filedialog.asksaveasfilename(
-            initialdir=str(self.variables.original_path.parent),
-            defaultextension=original_suffix,
-            filetypes=filetypes,
-            parent=self.main_window,
-            title='Save pixelated image as…')
-        if not selected_file:
-            return
-        #
-        logging.info('Saving the file as %r', selected_file)
-        #  save the file and reset the "touched" flag
-        self.variables.image.result.save(selected_file)
-        self.variables.file_touched = False
-
     def panel_select_area(self):
         """Show the image on a canvas and let
         the user select the area to be pixelated
@@ -483,16 +503,26 @@ class UserInterface():
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
+        line_frame = tkinter.Frame(image_frame)
         if self.variables.image.display_ratio > 1:
-            scale_factor = 'scaled down by factor %r' % float(
+            scale_factor = 'Scaled down by factor %r' % float(
                 self.variables.image.display_ratio)
         else:
-            scale_factor = 'original size'
+            scale_factor = 'Original size'
         #
-        image_label = tkinter.Label(
-            image_frame,
-            text='Preview (%s)' % scale_factor)
-        image_label.grid(sticky=tkinter.W)
+        label1 = tkinter.Label(
+            line_frame,
+            text=scale_factor)
+        preview_button = tkinter.Checkbutton(
+            line_frame,
+            command=self.show_image,
+            padx=5, pady=5,
+            text='Preview not-yet-applied pixelation',
+            variable=self.variables.px_image.show_preview,
+            indicatoron=0)
+        label1.grid(row=0, column=0, sticky=tkinter.W)
+        preview_button.grid(row=0, column=1)
+        line_frame.grid(sticky=tkinter.W)
         self.widgets.canvas = tkinter.Canvas(
             image_frame,
             width=CANVAS_WIDTH,
@@ -544,21 +574,24 @@ class UserInterface():
              self.variables.px_image.center_y.get()),
             SHAPES[self.variables.px_image.shape.get()],
             (width, height))
-        self.show_preview()
+        self.show_image()
 
-    def show_preview(self):
-        """Update the preview"""
+    def show_image(self):
+        """Show image or preview according to the show_preview setting"""
         if self.variables.px_image.show_preview.get():
-            self.widgets.canvas.delete('image')
-            self.variables.tk_image = self.variables.image.get_tk_image(
-                self.variables.image.result)
-            self.widgets.canvas.create_image(
-                0, 0,
-                image=self.variables.tk_image,
-                anchor=tkinter.NW,
-                tags='image')
-            self.widgets.canvas.tag_lower('image', 'selector')
+            source_image = self.variables.image.result
+        else:
+            source_image = self.variables.image.original
         #
+        self.widgets.canvas.delete('image')
+        self.variables.tk_image = self.variables.image.get_tk_image(
+            source_image)
+        self.widgets.canvas.create_image(
+            0, 0,
+            image=self.variables.tk_image,
+            anchor=tkinter.NW,
+            tags='image')
+        self.widgets.canvas.tag_lower('image', 'selector')
 
     def draw_selector(self):
         """Draw the pixelation selector on the canvas,
@@ -601,12 +634,20 @@ class UserInterface():
         self.widgets.canvas.tag_bind(
             "selector", "<B1-Motion>", self.drag)
 
-    def apply_changes(self, *unused_arguments):
-        """Apply changes if trace is active"""
+    def trigger_selection_change(self, *unused_arguments):
+        """Trigger update after selection changed"""
         if self.variables.trace:
             self.variables.file_touched = True
             self.apply_pixelation()
             self.draw_selector()
+        #
+
+    def trigger_preview_toggle(self, *unused_arguments):
+        """Trigger preview update"""
+        try:
+            self.show_image()
+        except AttributeError as error:
+            logging.warning('%s', error)
         #
 
     def drag_start(self, event):
@@ -628,12 +669,13 @@ class UserInterface():
             (bbox[0] + bbox[2]) // 2)
         center_y = self.variables.image.from_display_size(
             (bbox[1] + bbox[3]) // 2)
+        # Set the center coordinates and trigger the
+        # selection change explicitly
         self.variables.trace = False
         self.variables.px_image.center_x.set(center_x)
         self.variables.px_image.center_y.set(center_y)
-        self.variables.file_touched = True
-        self.apply_pixelation()
         self.variables.trace = True
+        self.trigger_selection_change()
 
     def drag(self, event):
         """Handle dragging of an object"""
@@ -657,22 +699,25 @@ class UserInterface():
     def drag_size_stop(self, *unused_event):
         """End drag for a new size"""
         bbox = self.widgets.canvas.bbox('size')
+        if not bbox:
+            return
+        #
         center_x = self.variables.image.from_display_size(
             (bbox[0] + bbox[2]) // 2)
         center_y = self.variables.image.from_display_size(
             (bbox[1] + bbox[3]) // 2)
         width = self.variables.image.from_display_size(bbox[2] - bbox[0])
         height = self.variables.image.from_display_size(bbox[3] - bbox[1])
+        # Set the selection attributes and trigger the
+        # selection change explicitly
         self.variables.trace = False
         self.variables.px_image.center_x.set(center_x)
         self.variables.px_image.center_y.set(center_y)
         self.variables.px_image.width.set(width)
         self.variables.px_image.height.set(height)
-        self.variables.file_touched = True
-        self.widgets.canvas.delete('size')
-        self.draw_selector()
-        self.apply_pixelation()
         self.variables.trace = True
+        self.widgets.canvas.delete('size')
+        self.trigger_selection_change()
 
     def drag_size(self, event):
         """Drag the size selector"""
@@ -680,6 +725,30 @@ class UserInterface():
         current_y = event.y
         [left, right] = sorted((current_x, self.variables.drag_data["x"]))
         [top, bottom] = sorted((current_y, self.variables.drag_data["y"]))
+        # Respect "quadratic" setting
+        if self.variables.px_image.quadratic.get():
+            width = new_width = right - left
+            height = new_height = bottom - top
+            if width > height:
+                new_width = height
+            elif height > width:
+                new_height = width
+            #
+            if new_width != width:
+                if current_x == left:
+                    left = right - new_width
+                else:
+                    right = left + new_width
+                #
+            #
+            if new_height != height:
+                if current_y == top:
+                    top = bottom - new_height
+                else:
+                    bottom = top + new_height
+                #
+            #
+        #
         self.variables.px_display.shape = \
             self.variables.px_image.shape.get()
         #
@@ -861,12 +930,12 @@ class UserInterface():
         next_button.grid(column=0, sticky=tkinter.W, **buttons_grid)
         apply_button = tkinter.Button(
             self.widgets.buttons_area,
-            text='Apply and continue',
-            command=self.variables.image.apply_result)
+            text='Apply',
+            command=self.do_apply_changes)
         apply_button.grid(column=1, sticky=tkinter.W, **buttons_grid)
         save_button = tkinter.Button(
             self.widgets.buttons_area,
-            text='Save as…',
+            text='Save',
             command=self.do_save_file)
         save_button.grid(column=2, sticky=tkinter.W, **buttons_grid)
         about_button = tkinter.Button(
