@@ -1,0 +1,16 @@
+digraph "pixelate-images generic workflow" {
+
+load_image[label="Load Image", shape=rect]
+change_selection[label="Main User Interaction", shape=rect]
+apply_change[label="Apply Pixelation", shape=rect]
+save_image[label="Save Image", shape=rect]
+quit[label="Quit", shape=rect]
+
+Start -> load_image;
+load_image -> change_selection;
+change_selection -> {load_image apply_change save_image quit};
+apply_change -> change_selection;
+save_image -> change_selection;
+quit -> Finish;
+
+}
