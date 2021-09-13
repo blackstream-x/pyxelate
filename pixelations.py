@@ -9,13 +9,18 @@ Module for pixelating parts of images
 """
 
 
+import io
 import logging
 import math
+import re
 import time
 
 from fractions import Fraction
 
-from PIL import Image, ImageDraw, ImageTk
+from PIL import Image
+from PIL import ImageDraw
+from PIL import ImageTk
+from PIL import features
 
 
 #
@@ -30,6 +35,42 @@ DEFAULT_CANVAS_SIZE = (720, 405)
 #
 # Helper functions
 #
+
+
+def get_supported_extensions():
+    """Get file name extensions supported by PIL"""
+    prx_separator_line = re.compile('^-+$', re.M)
+    prx_comma_blank = re.compile(',\s+')
+    prx_extensions = re.compile('^Extensions:\s+')
+    prx_capabilities = re.compile('^Features:\s+')
+    open_support = set()
+    save_support = set()
+    pil_info = io.StringIO()
+    features.pilinfo(supported_formats=True, out=pil_info)
+    pil_info.seek(0)
+    for block in prx_separator_line.split(pil_info.read()):
+        if 'Extensions:' in block and 'Features:' in block:
+            extensions = []
+            capabilities = []
+            for line in block.splitlines():
+                if prx_extensions.match(line):
+                    extensions = prx_comma_blank.split(
+                        prx_extensions.sub('', line))
+                elif prx_capabilities.match(line):
+                    capabilities = prx_comma_blank.split(
+                        prx_capabilities.sub('', line))
+                    #
+                #
+            #
+            if 'open' in capabilities:
+                open_support.update(extensions)
+            #
+            if 'save' in capabilities:
+                save_support.update(extensions)
+            #
+        #
+    #
+    return (open_support, save_support)
 
 
 def dimension_display_ratio(image_size, canvas_size):
