@@ -102,7 +102,7 @@ class ModalDialog(tkinter.Toplevel):
 class InfoDialog(ModalDialog):
 
     """Info dialog,
-    instantiated with a seriess of (heading, paragraph) tuples
+    instantiated with a series of (heading, paragraph) tuples
     after the parent window
     """
 
