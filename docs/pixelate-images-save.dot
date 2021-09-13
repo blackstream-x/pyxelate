@@ -1,0 +1,22 @@
+digraph "pixelate-images save (detail workflow)" {
+
+check_unapplied_changes[shape=diamond, label="Unapplied\nchanges?"]
+ask_to_apply[shape=diamond; label="Ask user:\nApply?"]
+check_applied_changes[shape=diamond, label="Applied\nchanges?"]
+apply_changes[label="Apply Pixelation", shape=rect]
+save[label="Save Image", shape=rect]
+
+{ rank=same; ask_to_apply; check_applied_changes }
+{ rank=same; apply_changes; save; Finish }
+
+Start -> check_unapplied_changes
+check_unapplied_changes -> ask_to_apply[label=yes]
+ask_to_apply -> apply_changes[label=yes]
+apply_changes -> save
+ask_to_apply -> check_applied_changes[label=no]
+check_unapplied_changes -> check_applied_changes[label=no]
+check_applied_changes -> Finish[label=no]
+check_applied_changes -> save[label=yes]
+save -> Finish;
+
+}
