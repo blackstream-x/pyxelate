@@ -20,11 +20,9 @@ installed with that name, otherwise as `Pixelate`.
 
 ## Thunar (XFCE)
 
-Add the command `autoselect.py %f` to Thunar using a custom action
-as documented in
+Add the command `autoselect.py %f` (with its full path as printed by `readlink -f`)
+to Thunar using a custom action as documented in
 <https://docs.xfce.org/xfce/thunar/custom-actions>.
-
-You probably need to prefix the command with its full path.
 
 Select "Image files" and "Video files" on the "Appearance Conditions" tab.
 
