@@ -431,24 +431,21 @@ class UserInterface:
         # Trigger the selection change explicitly
         self.trigger_selection_change()
 
-    def do_apply_changes(self, interactive_mode=True):
+    def do_apply_changes(self):
         """Apply changes to the image"""
-        # Rrecord the position, shape, size,
-        # and tilesize of the selection, and append that together with
-        # the current image as a tuple to the undo buffer
+        # Append the current state to the undo buffer
         self.vars.undo_buffer.append(
             (self.vars.image.original,
-             FrozenSelection(self.tkvars.selection)))
+             FrozenSelection(self.tkvars.selection),
+             self.vars.unapplied_changes))
         if len(self.vars.undo_buffer) > UNDO_SIZE:
             del self.vars.undo_buffer[:-UNDO_SIZE]
         #
-        # Visual feedback in interactive mode
-        if interactive_mode:
-            self.__do_draw_indicator(stipple='gray75')
-            self.main_window.update_idletasks()
-            time.sleep(.2)
-            self.__do_draw_indicator()
-        #
+        # Visual feedback
+        self.__do_draw_indicator(stipple='gray75')
+        self.main_window.update_idletasks()
+        time.sleep(.2)
+        self.__do_draw_indicator()
         self.vars.image.set_original(self.vars.image.result)
         self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
         self.tkvars.buttonstate.save.set(tkinter.NORMAL)
@@ -647,6 +644,7 @@ class UserInterface:
         self.vars.original_path = pathlib.Path(selected_file)
         self.tkvars.file_name.set(self.vars.original_path.name)
         self.vars.undo_buffer.clear()
+        self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
         self.tkvars.buttonstate.save.set(tkinter.DISABLED)
         self.vars.unapplied_changes = False
         return True
@@ -687,13 +685,16 @@ class UserInterface:
         #
 
     def do_undo(self):
-        """Revert to the previously applied image"""
+        """Revert to the state before doing the last apply"""
         try:
-            (previous_image, previous_selection) = self.vars.undo_buffer.pop()
+            last_state = self.vars.undo_buffer.pop()
         except IndexError:
-            self.__do_update_button('undo', tkinter.DISABLED)
             return
         #
+        if not self.vars.undo_buffer:
+            self.__do_update_button('undo', tkinter.DISABLED)
+        #
+        (previous_image, previous_selection, unapplied_changes) = last_state
         self.vars.image.set_original(previous_image)
         self.vars.trace = False
         previous_selection.restore_to(self.tkvars.selection)
@@ -703,7 +704,8 @@ class UserInterface:
         self.main_window.update_idletasks()
         time.sleep(.2)
         self.__do_draw_indicator()
-        self.vars.unapplied_changes = False
+        self.vars.unapplied_changes = unapplied_changes
+        self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
 
     def __do_update_button(self, button_name, new_state):
         """Update a button state if required"""
@@ -727,6 +729,22 @@ class UserInterface:
             self.tkvars.selection[key].set(value)
         #
         self.vars.trace = True
+
+    def __get_bbox_selection(self, tag_name):
+        """Get the bbox selection as a Namespace with the
+        selection coordinates (center and dimensions),
+        calculated from display to image size
+        """
+        left, top, right, bottom = self.widgets.canvas.bbox(tag_name)
+        center_x = self.vars.image.from_display_size((left + right) // 2)
+        center_y = self.vars.image.from_display_size((top + bottom) // 2)
+        width = self.vars.image.from_display_size(right - left)
+        height = self.vars.image.from_display_size(bottom - top)
+        return Namespace(
+            center_x=center_x,
+            center_y=center_y,
+            width=width,
+            height=height)
 
     def __get_save_recommendation(self, ask_to_apply=False):
         """Return True or False (depending on the necessity to
@@ -757,26 +775,10 @@ class UserInterface:
                     'Not yet applied changes',
                     'Pixelate the current selection before saving?',
                     default=default_answer):
-                self.do_apply_changes(interactive_mode=False)
+                self.do_apply_changes()
             #
         #
         return bool(self.vars.undo_buffer)
-
-    def __get_bbox_selection(self, tag_name):
-        """Get the bbox selection as a Namespace with the
-        selection coordinates (center and dimensions),
-        calculated from display to image size
-        """
-        left, top, right, bottom = self.widgets.canvas.bbox(tag_name)
-        center_x = self.vars.image.from_display_size((left + right) // 2)
-        center_y = self.vars.image.from_display_size((top + bottom) // 2)
-        width = self.vars.image.from_display_size(right - left)
-        height = self.vars.image.from_display_size(bottom - top)
-        return Namespace(
-            center_x=center_x,
-            center_y=center_y,
-            width=width,
-            height=height)
 
     def __next_action(self):
         """Execute the next action"""
