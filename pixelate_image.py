@@ -86,6 +86,11 @@ SHAPES = {
     SQUARE: RECTANGLE,
 }
 
+ELLIPTIC_SHAPES = (OVAL, CIRCLE)
+RECTANGULAR_SHAPES = (RECT, SQUARE)
+QUADRATIC_SHAPES = (CIRCLE, SQUARE)
+ALL_SHAPES = ELLIPTIC_SHAPES + RECTANGULAR_SHAPES
+
 MINIMUM_TILESIZE = 10
 MAXIMUM_TILESIZE = 200
 TILESIZE_INCREMENT = 5
@@ -98,12 +103,35 @@ POSSIBLE_INDICATOR_COLORS = (
 
 UNDO_SIZE = 20
 
+HEADINGS_FONT = (None, 10, 'bold')
+
+
 #
 # Helper Functions
 #
 
 
-...
+def get_widget_state(widget):
+    """Get a widget state"""
+    return widget.cget('state')
+
+
+def reconfigure_widget(widget, **kwargs):
+    """Reconfigure a widget, avoiding eceptions
+    for nonexisting widgets
+    """
+    if not widget:
+        return
+    #
+    widget.config(**kwargs)
+
+
+def show_heading(frame, text, **kwargs):
+    """Show a heading in the headings font,
+    grid-positioned using **kwargs
+    """
+    heading = tkinter.Label(frame, font=HEADINGS_FONT, text=text)
+    heading.grid(**kwargs)
 
 
 #
@@ -171,7 +199,7 @@ class FrozenSelection:
         self.original_values = {key: selection[key].get()
                                 for key in self.variables}
         self.effective_values = dict(self.original_values)
-        if self.effective_values['shape'] in (CIRCLE, SQUARE):
+        if self.effective_values['shape'] in QUADRATIC_SHAPES:
             self.effective_values['height'] = self.effective_values['width']
         #
 
@@ -191,6 +219,10 @@ class FrozenSelection:
             #
         #
         return True
+
+    def __str__(self,):
+        """Effective selection representation"""
+        return repr(tuple(self.effective_values.values()))
 
 
 class UserInterface:
@@ -220,19 +252,18 @@ class UserInterface:
             open_support=sorted(open_support),
             save_support=sorted(save_support),
             current_panel=None,
-            disable_next_button=False,
             errors=[],
             tk_image=None,
             image=None,
             original_path=file_path,
             trace=False,
-            file_touched=False,
+            unapplied_changes=False,
             undo_buffer=[],
             drag_data=Namespace(
                 x=0,
                 y=0,
                 item=None),
-            )
+        )
         self.tkvars = Namespace(
             file_name=tkinter.StringVar(),
             show_preview=tkinter.IntVar(),
@@ -246,15 +277,19 @@ class UserInterface:
             indicator=Namespace(
                 color=tkinter.StringVar(),
                 drag_color=tkinter.StringVar()),
-            )
+            buttonstate=Namespace(
+                apply=tkinter.StringVar(),
+                save=tkinter.StringVar()),
+        )
         # Trace changes:
         # … to selection variables
         for (_, variable) in self.tkvars.selection.items():
             variable.trace_add('write', self.trigger_selection_change)
         #
-        # TODO: … to the disable_buttons variables
-        # for (_, variable) in self.tkvars.disable_buttons.items():
-        #     variable.trace_add('write', self.trigger_button_states)
+        # … to the buttonstate variables
+        for (_, variable) in self.tkvars.buttonstate.items():
+            variable.set(tkinter.NORMAL)
+            variable.trace_add('write', self.trigger_button_states)
         #
         # … to the indicator.color variable
         self.tkvars.indicator.drag_color.set('blue')
@@ -276,6 +311,149 @@ class UserInterface:
             quit_on_empty_choice=True)
         self.main_window.protocol('WM_DELETE_WINDOW', self.quit)
         self.main_window.mainloop()
+
+    def cb_indicator_drag_move(self, event):
+        """Handle dragging of the indicator"""
+        # compute how much the mouse has moved
+        current_x = event.x
+        current_y = event.y
+        delta_x = current_x - self.vars.drag_data.x
+        delta_y = current_y - self.vars.drag_data.y
+        # move the object the appropriate amount
+        self.widgets.canvas.move(
+            self.vars.drag_data.item, delta_x, delta_y)
+        # record the new position
+        self.vars.drag_data.x = current_x
+        self.vars.drag_data.y = current_y
+        # Update the selection (position only)
+        coordinates = self.__get_bbox_selection('indicator')
+        self.__do_update_selection(
+            center_x=coordinates.center_x,
+            center_y=coordinates.center_y)
+
+    def cb_indicator_drag_start(self, event):
+        """Begining drag of the indicator"""
+        # record the item and its location
+        self.vars.drag_data.item = 'indicator'
+        self.vars.drag_data.x = event.x
+        self.vars.drag_data.y = event.y
+
+    def cb_indicator_drag_stop(self, *unused_event):
+        """End drag of an object"""
+        # reset the drag information
+        self.vars.drag_data.item = None
+        self.vars.drag_data.x = 0
+        self.vars.drag_data.y = 0
+        # Trigger the selection change explicitly
+        self.trigger_selection_change()
+
+    def cb_selection_drag_move(self, event):
+        """Drag a new selection"""
+        current_x = event.x
+        current_y = event.y
+        [left, right] = sorted((current_x, self.vars.drag_data.x))
+        [top, bottom] = sorted((current_y, self.vars.drag_data.y))
+        # Respect "quadratic" shapes
+        if self.tkvars.selection.shape.get() in QUADRATIC_SHAPES:
+            width = right - left
+            height = bottom - top
+            new_size = max(width, height)
+            if new_size == height:
+                if current_x == left:
+                    left = right - new_size
+                else:
+                    right = left + new_size
+                #
+            elif new_size == width:
+                if current_y == top:
+                    top = bottom - new_size
+                else:
+                    bottom = top + new_size
+                #
+            #
+        #
+        # Draw a new selection outline
+        self.widgets.canvas.delete('size')
+        outer_dash = (1, 1)
+        shape = self.tkvars.selection.shape.get()
+        current_color = self.tkvars.indicator.drag_color.get()
+        if shape in ELLIPTIC_SHAPES:
+            outer_dash = (5, 5)
+        #
+        self.widgets.canvas.create_rectangle(
+            left, top, right, bottom,
+            dash=outer_dash,
+            outline=current_color,
+            tags='size')
+        if shape in ELLIPTIC_SHAPES:
+            self.widgets.canvas.create_oval(
+                left, top, right, bottom,
+                dash=(1, 1),
+                outline=current_color,
+                tags='size')
+        # Update the selection
+        coordinates = self.__get_bbox_selection('size')
+        self.__do_update_selection(
+            center_x=coordinates.center_x,
+            center_y=coordinates.center_y,
+            width=coordinates.width,
+            height=coordinates.height)
+
+    def cb_selection_drag_start(self, event):
+        """Begining dragging for a new selection"""
+        # record the item and its location
+        self.vars.drag_data.item = 'size'
+        self.vars.drag_data.x = event.x
+        self.vars.drag_data.y = event.y
+
+    def cb_selection_drag_stop(self, *unused_event):
+        """End drag for a new selection"""
+        try:
+            coordinates = self.__get_bbox_selection('size')
+        except TypeError:
+            # No selection dragged (i.e. click without dragging)
+            return
+        #
+        self.widgets.canvas.delete('size')
+        # Adjust to minimum sizes
+        if coordinates.width < MINIMUM_SELECTION_SIZE:
+            coordinates.width = MINIMUM_SELECTION_SIZE
+        #
+        if coordinates.height < MINIMUM_SELECTION_SIZE:
+            coordinates.height = MINIMUM_SELECTION_SIZE
+        #
+        # Set the selection attributes
+        self.__do_update_selection(
+            center_x=coordinates.center_x,
+            center_y=coordinates.center_y,
+            width=coordinates.width,
+            height=coordinates.height)
+        # Trigger the selection change explicitly
+        self.trigger_selection_change()
+
+    def do_apply_changes(self, interactive_mode=True):
+        """Apply changes to the image"""
+        # Rrecord the position, shape, size,
+        # and tilesize of the selection, and append that together with
+        # the current image as a tuple to the undo buffer
+        self.vars.undo_buffer.append(
+            (self.vars.image.original,
+             FrozenSelection(self.tkvars.selection)))
+        if len(self.vars.undo_buffer) > UNDO_SIZE:
+            del self.vars.undo_buffer[:-UNDO_SIZE]
+        #
+        # Visual feedback in interactive mode
+        if interactive_mode:
+            self.__do_draw_indicator(stipple='gray75')
+            self.main_window.update_idletasks()
+            time.sleep(.2)
+            self.__do_draw_indicator()
+        #
+        self.vars.image.set_original(self.vars.image.result)
+        self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
+        self.tkvars.buttonstate.save.set(tkinter.NORMAL)
+        self.trigger_preview_toggle()
+        self.vars.unapplied_changes = False
 
     def do_choose_image(self,
                         keep_existing=False,
@@ -321,7 +499,7 @@ class UserInterface:
                 file_path = None
                 continue
             #
-            if self.vars.file_touched:
+            if self.vars.unapplied_changes or self.vars.undo_buffer:
                 confirmation = messagebox.askyesno(
                     'Unsaved Changes',
                     'Discard the chages made to'
@@ -332,22 +510,68 @@ class UserInterface:
                 #
             #
             # Set original_path and read image data
-            self.do_load_image(file_path)
+            self.__do_load_image(file_path)
             break
         #
+        self.vars.undo_buffer.clear()
+        self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
+        self.tkvars.buttonstate.save.set(tkinter.DISABLED)
         self.next_panel()
 
-    def do_load_image(self, file_path):
+    def __do_draw_indicator(self, stipple='gray12'):
+        """Draw the pixelation selector on the canvas,
+        its coordinates determined by the px_* variables
+        """
+        canvas = self.widgets.canvas
+        if not canvas:
+            return
+        #
+        width = self.vars.image.to_display_size(
+            self.tkvars.selection.width.get())
+        if self.tkvars.selection.shape.get() in QUADRATIC_SHAPES:
+            height = width
+        else:
+            height = self.vars.image.to_display_size(
+                self.tkvars.selection.height.get())
+        #
+        center_x = self.vars.image.to_display_size(
+            self.tkvars.selection.center_x.get())
+        center_y = self.vars.image.to_display_size(
+            self.tkvars.selection.center_y.get())
+        left = center_x - width // 2
+        right = left + width
+        top = center_y - height // 2
+        bottom = top + height
+        shape = self.tkvars.selection.shape.get()
+        canvas.delete('indicator')
+        if shape in ELLIPTIC_SHAPES:
+            create_widget = canvas.create_oval
+        elif shape in RECTANGULAR_SHAPES:
+            create_widget = canvas.create_rectangle
+        #
+        current_color = self.tkvars.indicator.color.get()
+        create_widget(
+            left, top, right, bottom,
+            outline=current_color,
+            fill=current_color,
+            stipple=stipple,
+            tags='indicator')
+        # add bindings to drag the selector over the image
+        canvas.tag_bind(
+            'indicator', "<ButtonPress-1>", self.cb_indicator_drag_start)
+        canvas.tag_bind(
+            'indicator', "<ButtonRelease-1>", self.cb_indicator_drag_stop)
+        canvas.tag_bind(
+            'indicator', "<B1-Motion>", self.cb_indicator_drag_move)
+
+    def __do_load_image(self, file_path):
         """Load the image"""
         self.vars.original_path = file_path
         self.vars.image = pixelations.ImagePixelation(
             file_path, canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
-        (im_width, im_height) = self.vars.image.original.size
-        # center selection
-        self.tkvars.selection.center_x.set(im_width // 2)
-        self.tkvars.selection.center_y.set(im_height // 2)
         # set selection sizes and reduce them
         # to the image dimensions if necessary
+        (im_width, im_height) = self.vars.image.original.size
         sel_width = self.tkvars.selection.width.get()
         if not sel_width:
             # Set initial selection width to 20% of image width
@@ -355,12 +579,15 @@ class UserInterface:
                 INITIAL_SELECTION_SIZE,
                 round(im_width / 5))
         #
-        self.tkvars.selection.width.set(min(sel_width, im_width))
         sel_height = self.tkvars.selection.height.get()
         if not sel_height:
             sel_height = sel_width
         #
-        self.tkvars.selection.height.set(min(sel_height, im_height))
+        self.__do_update_selection(
+            center_x=im_width // 2,
+            center_y=im_height // 2,
+            width=min(sel_width, im_width),
+            height=min(sel_height, im_height))
         # set the shape
         if not self.tkvars.selection.shape.get():
             self.tkvars.selection.shape.set(OVAL)
@@ -374,63 +601,33 @@ class UserInterface:
         self.tkvars.show_preview.set(1)
         # set the displayed file name
         self.tkvars.file_name.set(file_path.name)
-        self.vars.file_touched = False
+        self.vars.unapplied_changes = False
 
-    def do_apply_changes(self, interactive_mode=True):
-        """Apply changes to the image"""
-        # Rrecord the position, shape, size,
-        # and tilesize of the selection, and append that together with
-        # the current image as a tuple to the undo buffer
-        self.vars.undo_buffer.append(
-            (self.vars.image.original,
-             FrozenSelection(self.tkvars.selection)))
-        if len(self.vars.undo_buffer) > UNDO_SIZE:
-            del self.vars.undo_buffer[:-UNDO_SIZE]
+    def __do_pixelate(self):
+        """Apply the pixelation to the image and update the preview"""
+        self.vars.image.set_tilesize(
+            self.tkvars.selection.tilesize.get())
+        width = self.tkvars.selection.width.get()
+        if self.tkvars.selection.shape.get() in QUADRATIC_SHAPES:
+            height = width
+        else:
+            height = self.tkvars.selection.height.get()
         #
-        # Visual feedback in interactive mode
-        if interactive_mode:
-            self.draw_indicator(stipple='gray75')
-            self.main_window.update_idletasks()
-            time.sleep(.2)
-            self.draw_indicator()
-        #
-        self.vars.image.set_original(self.vars.image.result)
-        # TODO: deactivate "Apply" button
-        self.trigger_preview_toggle()
+        self.vars.image.set_shape(
+            (self.tkvars.selection.center_x.get(),
+             self.tkvars.selection.center_y.get()),
+            SHAPES[self.tkvars.selection.shape.get()],
+            (width, height))
+        self.__do_show_image()
 
     def do_save_file(self):
         """Save as the selected file,
         return True if the file was saved
         """
-        # Compare the position, shape, size,
-        # and tilesize of the selection
-        # with the ones recorded at applying time.
-        # If they differ, and the preview is active, ask
-        # if the currently previewed pixelation should be applied
-        # (WYSIWYG approach)
-        try:
-            last_applied_selection = self.vars.undo_buffer[-1][1]
-        except IndexError:
-            # Empty undo buffer
-            undo_buffer_empty = True
-        else:
-            undo_buffer_empty = False
-            current_selection = FrozenSelection(self.tkvars.selection)
-            if current_selection != last_applied_selection:
-                self.vars.file_touched = True
-            #
-        #
-        if self.vars.file_touched and \
-                self.tkvars.show_preview.get():
-            if messagebox.askyesno(
-                    'Not yet applied changes',
-                    'Pixelate the current selection before saving?'):
-                self.do_apply_changes(interactive_mode=False)
-            elif undo_buffer_empty:
-                messagebox.showinfo(
-                    'Image unchanged', 'Nothing to save in this case.')
-                return False
-            #
+        if not self.__get_save_recommendation(ask_to_apply=True):
+            messagebox.showinfo(
+                'Image unchanged', 'Nothing to save.')
+            return False
         #
         original_suffix = self.vars.original_path.suffix
         filetypes = [('Supported image files', f'*{suffix}') for suffix
@@ -444,66 +641,373 @@ class UserInterface:
         if not selected_file:
             return False
         #
-        logging.info('Saving the file as %r', selected_file)
+        logging.debug('Saving the file as %r', selected_file)
         #  save the file and reset the "touched" flag
         self.vars.image.original.save(selected_file)
         self.vars.original_path = pathlib.Path(selected_file)
         self.tkvars.file_name.set(self.vars.original_path.name)
         self.vars.undo_buffer.clear()
-        # self.update_ ??? FIXME
-        # TODO: deactivate "Save" button
-        self.vars.file_touched = False
+        self.tkvars.buttonstate.save.set(tkinter.DISABLED)
+        self.vars.unapplied_changes = False
         return True
 
-    def show_settings_frame(self):
-        """Show the shape frame"""
-        settings_frame = tkinter.Frame(
-            self.widgets.action_area,
-            **self.with_border)
-        heading = tkinter.Label(
-            settings_frame,
-            font=(None, 11, 'bold'),
-            text='Original file:')
-        heading.grid(sticky=tkinter.W, columnspan=4)
-        label = tkinter.Label(
-            settings_frame,
-            textvariable=self.tkvars.file_name)
-        label.grid(sticky=tkinter.W, columnspan=5)
-        choose_button = tkinter.Button(
-            settings_frame,
-            text='Choose another file',
-            command=self.do_choose_image)
-        choose_button.grid(sticky=tkinter.W, columnspan=4)
-        heading = tkinter.Label(
-            settings_frame,
-            font=(None, 11, 'bold'),
-            text='Display:')
-        heading.grid(sticky=tkinter.W, columnspan=4)
+    def __do_show_image(self):
+        """Show image or preview according to the show_preview setting"""
+        canvas = self.widgets.canvas
+        if not canvas:
+            return
+        #
+        if self.tkvars.show_preview.get():
+            source_image = self.vars.image.result
+        else:
+            source_image = self.vars.image.original
+        #
+        canvas.delete('image')
+        self.vars.tk_image = self.vars.image.get_tk_image(
+            source_image)
+        canvas.create_image(
+            0, 0,
+            image=self.vars.tk_image,
+            anchor=tkinter.NW,
+            tags='image')
+        canvas.tag_lower('image', 'indicator')
+
+    def __do_toggle_height(self):
+        """Toggle height spinbox to follow width"""
+        if self.tkvars.selection.shape.get() in QUADRATIC_SHAPES:
+            reconfigure_widget(
+                self.widgets.height,
+                state=tkinter.DISABLED,
+                textvariable=self.tkvars.selection.width)
+        else:
+            reconfigure_widget(
+                self.widgets.height,
+                state='readonly',
+                textvariable=self.tkvars.selection.height)
+        #
+
+    def do_undo(self):
+        """Revert to the previously applied image"""
+        try:
+            (previous_image, previous_selection) = self.vars.undo_buffer.pop()
+        except IndexError:
+            self.__do_update_button('undo', tkinter.DISABLED)
+            return
+        #
+        self.vars.image.set_original(previous_image)
+        self.vars.trace = False
+        previous_selection.restore_to(self.tkvars.selection)
+        self.vars.trace = True
+        self.__do_pixelate()
+        self.__do_draw_indicator(stipple='error')
+        self.main_window.update_idletasks()
+        time.sleep(.2)
+        self.__do_draw_indicator()
+        self.vars.unapplied_changes = False
+
+    def __do_update_button(self, button_name, new_state):
+        """Update a button state if required"""
+        button_widget = self.widgets.buttons[button_name]
+        try:
+            old_state = get_widget_state(button_widget)
+        except AttributeError:
+            return
+        #
+        if old_state == new_state:
+            return
+        #
+        reconfigure_widget(button_widget, state=new_state)
+        logging.debug(
+            '%r button state: %r => %r', button_name, old_state, new_state)
+
+    def __do_update_selection(self, **kwargs):
+        """Update the selection for the provided key=value pairs"""
+        self.vars.trace = False
+        for (key, value) in kwargs.items():
+            self.tkvars.selection[key].set(value)
+        #
+        self.vars.trace = True
+
+    def __get_save_recommendation(self, ask_to_apply=False):
+        """Return True or False (depending on the necessity to
+        save the image)
+        """
+        try:
+            last_applied_selection = self.vars.undo_buffer[-1][1]
+        except IndexError:
+            logging.debug('No last applied selection!')
+        else:
+            current_selection = FrozenSelection(self.tkvars.selection)
+            logging.debug('Last applied selection: %s', last_applied_selection)
+            logging.debug('Current selection:      %s', current_selection)
+            logging.debug(
+                'Selections are equal: %r',
+                current_selection == last_applied_selection)
+        #
+        if self.vars.unapplied_changes:
+            if not ask_to_apply:
+                return True
+            #
+            if self.tkvars.show_preview.get():
+                default_answer = messagebox.YES
+            else:
+                default_answer = messagebox.NO
+            #
+            if messagebox.askyesno(
+                    'Not yet applied changes',
+                    'Pixelate the current selection before saving?',
+                    default=default_answer):
+                self.do_apply_changes(interactive_mode=False)
+            #
+        #
+        return bool(self.vars.undo_buffer)
+
+    def __get_bbox_selection(self, tag_name):
+        """Get the bbox selection as a Namespace with the
+        selection coordinates (center and dimensions),
+        calculated from display to image size
+        """
+        left, top, right, bottom = self.widgets.canvas.bbox(tag_name)
+        center_x = self.vars.image.from_display_size((left + right) // 2)
+        center_y = self.vars.image.from_display_size((top + bottom) // 2)
+        width = self.vars.image.from_display_size(right - left)
+        height = self.vars.image.from_display_size(bottom - top)
+        return Namespace(
+            center_x=center_x,
+            center_y=center_y,
+            width=width,
+            height=height)
+
+    def __next_action(self):
+        """Execute the next action"""
+        current_index = PHASES.index(self.vars.current_panel)
+        next_index = current_index + 1
+        try:
+            next_phase = PHASES[next_index]
+        except IndexError as error:
+            raise ValueError(
+                f'Phase number #{next_index} out of range') from error
+        #
+        method_display = (
+            f'Action method for phase #{next_index} ({next_phase})')
+        method_name = f'action_{next_phase})'
+        try:
+            action_method = getattr(self, method_name)
+        except AttributeError:
+            logging.debug('%s is undefined', method_display)
+        else:
+            try:
+                action_method()
+            except NotImplementedError as error:
+                raise ValueError(
+                    f'{method_display} has not been implemented yet') \
+                    from error
+            #
+        #
+        self.vars.current_phase = next_phase
+
+    def next_panel(self):
+        """Execute the next action and go to the next panel"""
+        try:
+            self.__next_action()
+        except ValueError as error:
+            self.vars.errors.append(str(error))
+        #
+        self.__show_panel()
+
+    def panel_select_area(self):
+        """Show the image on a canvas and let
+        the user select the area to be pixelated
+        """
         if self.vars.image.display_ratio > 1:
             scale_factor = 'Size: scaled down (factor: %r)' % float(
                 self.vars.image.display_ratio)
         else:
             scale_factor = 'Size: original dimensions'
         #
-        label = tkinter.Label(settings_frame, text=scale_factor)
-        label.grid(sticky=tkinter.W, columnspan=4)
-        heading = tkinter.Label(
+        self.__show_settings_frame(scale_factor=scale_factor)
+        image_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        self.widgets.canvas = tkinter.Canvas(
+            image_frame,
+            width=CANVAS_WIDTH,
+            height=CANVAS_HEIGHT)
+        self.vars.tk_image = self.vars.image.get_tk_image(
+            self.vars.image.original)
+        self.widgets.canvas.create_image(
+            0, 0,
+            image=self.vars.tk_image,
+            anchor=tkinter.NW,
+            tags='image')
+        self.widgets.canvas.grid()
+        self.__do_draw_indicator()
+        self.__do_pixelate()
+        self.vars.trace = True
+        # add bindings to create a new selector
+        self.widgets.canvas.tag_bind(
+            'image', "<ButtonPress-1>", self.cb_selection_drag_start)
+        self.widgets.canvas.tag_bind(
+            'image', "<ButtonRelease-1>", self.cb_selection_drag_stop)
+        self.widgets.canvas.tag_bind(
+            'image', "<B1-Motion>", self.cb_selection_drag_move)
+        image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
+
+    def previous_panel(self):
+        """Go to the next panel"""
+        phase_name = self.vars.current_panel
+        phase_index = PHASES.index(phase_name)
+        method_display = (
+            f'Rollback method for phase #{phase_index} ({phase_name})')
+        method_name = f'rollback_{phase_name})'
+        try:
+            rollback_method = getattr(self, method_name)
+        except AttributeError:
+            logging.warning('%s is undefined', method_display)
+        else:
+            self.vars.current_phase = PHASES[phase_index - 1]
+            try:
+                rollback_method()
+            except NotImplementedError:
+                self.vars.errors.append(
+                    f'{method_display} has not been implemented yet')
+            #
+        #
+        self.__show_panel()
+
+    def quit(self, event=None):
+        """Exit the application"""
+        del event
+        #
+        if self.__get_save_recommendation(ask_to_apply=False):
+            if messagebox.askyesno('Unsaved Changes', 'Save your changes?'):
+                if not self.do_save_file():
+                    if not messagebox.askokcancel(
+                            'Changes not saved!',
+                            'Really exit without saving?',
+                            default=messagebox.CANCEL):
+                        return
+                    #
+                #
+            #
+        #
+        self.main_window.destroy()
+
+    def show_about(self):
+        """Show information about the application
+        in a modal dialog
+        """
+        gui_commons.InfoDialog(
+            self.main_window,
+            (SCRIPT_NAME,
+             'Version: {0}\nProject homepage: {1}'.format(
+                VERSION, HOMEPAGE)),
+            ('License:', LICENSE_TEXT),
+            title='About…')
+        #
+
+    def __show_errors(self):
+        """Show errors if there are any"""
+        if self.vars.errors:
+            gui_commons.InfoDialog(
+                self.main_window,
+                ('Errors:', '\n'.join(self.vars.errors)),
+                title='Errors occurred!')
+            self.vars.errors.clear()
+        #
+
+    def __show_panel(self):
+        """Show a panel.
+        Add the "Previous", "Next", "Choose another relase",
+        "About" and "Quit" buttons at the bottom
+        """
+        try:
+            self.widgets.action_area.grid_forget()
+        except AttributeError:
+            pass
+        #
+        self.widgets.action_area = tkinter.Frame(self.main_window)
+        try:
+            panel_method = getattr(
+                self,
+                'panel_%s' % self.vars.current_phase)
+        except AttributeError:
+            self.vars.errors.append(
+                'Panel for Phase %r has not been implemented yet,'
+                ' going back to phase %r.' % (
+                    self.vars.current_phase,
+                    self.vars.current_panel))
+            self.vars.current_phase = self.vars.current_panel
+            panel_method = getattr(
+                self,
+                'panel_%s' % self.vars.current_phase)
+        else:
+            self.vars.current_panel = self.vars.current_phase
+        #
+        self.__show_errors()
+        panel_method()
+        self.widgets.action_area.grid(**self.grid_fullwidth)
+        #
+        buttons_area = tkinter.Frame(self.widgets.action_area)
+        #
+        buttons_grid = dict(padx=5, pady=5, sticky=tkinter.E)
+        self.widgets.buttons.undo = tkinter.Button(
+            buttons_area,
+            text='\u21b6 Undo',
+            command=self.do_undo)
+        self.widgets.buttons.undo.grid(row=0, column=0, **buttons_grid)
+        self.widgets.buttons.apply = tkinter.Button(
+            buttons_area,
+            text='\u2713 Apply',
+            command=self.do_apply_changes)
+        self.widgets.buttons.apply.grid(row=0, column=1, **buttons_grid)
+        self.widgets.buttons.save = tkinter.Button(
+            buttons_area,
+            text='\U0001f5ab Save',
+            command=self.do_save_file)
+        self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
+        self.trigger_button_states()
+        about_button = tkinter.Button(
+            buttons_area,
+            text='\u24d8 About',
+            command=self.show_about)
+        about_button.grid(row=1, column=0, **buttons_grid)
+        quit_button = tkinter.Button(
+            buttons_area,
+            text='\u23fb Quit',
+            command=self.quit)
+        quit_button.grid(row=1, column=2, **buttons_grid)
+        self.widgets.action_area.rowconfigure(1, weight=100)
+        buttons_area.grid(row=2, column=1, sticky=tkinter.E)
+
+    def __show_shape_settings(self,
+                              settings_frame,
+                              fixed_tilesize=False,
+                              allowed_shapes=ALL_SHAPES):
+        """Show the shape part of the settings frame"""
+        show_heading(
             settings_frame,
-            font=(None, 11, 'bold'),
-            text='Selection:')
-        heading.grid(sticky=tkinter.W, columnspan=4)
+            'Selection:',
+            sticky=tkinter.W,
+            columnspan=4)
         label = tkinter.Label(
             settings_frame,
             text='Tile size:')
-        tilesize = tkinter.Spinbox(
-            settings_frame,
-            from_=MINIMUM_TILESIZE,
-            to=MAXIMUM_TILESIZE,
-            increment=TILESIZE_INCREMENT,
-            justify=tkinter.RIGHT,
-            state='readonly',
-            width=3,
-            textvariable=self.tkvars.selection.tilesize)
+        if fixed_tilesize:
+            tilesize = tkinter.Label(
+                settings_frame,
+                textvariable=self.tkvars.selection.tilesize)
+        else:
+            tilesize = tkinter.Spinbox(
+                settings_frame,
+                from_=MINIMUM_TILESIZE,
+                to=MAXIMUM_TILESIZE,
+                increment=TILESIZE_INCREMENT,
+                justify=tkinter.RIGHT,
+                state='readonly',
+                width=3,
+                textvariable=self.tkvars.selection.tilesize)
+        #
         label.grid(sticky=tkinter.W, column=0)
         tilesize.grid(
             sticky=tkinter.W,
@@ -514,7 +1018,7 @@ class UserInterface:
         shape_opts = tkinter.OptionMenu(
             settings_frame,
             self.tkvars.selection.shape,
-            OVAL, CIRCLE, RECT, SQUARE)
+            *allowed_shapes)
         label.grid(sticky=tkinter.W, column=0)
         shape_opts.grid(
             sticky=tkinter.W,
@@ -584,7 +1088,7 @@ class UserInterface:
             text='Preview:')
         preview_active = tkinter.Checkbutton(
             settings_frame,
-            command=self.show_image,
+            command=self.__do_show_image,
             text='active',
             variable=self.tkvars.show_preview,
             indicatoron=1)
@@ -592,11 +1096,45 @@ class UserInterface:
         preview_active.grid(
             sticky=tkinter.W,
             row=label.grid_info()['row'], column=1, columnspan=3)
-        heading = tkinter.Label(
+
+    def __show_settings_frame(self,
+                              scale_factor='original size',
+                              fixed_tilesize=False,
+                              allowed_shapes=ALL_SHAPES):
+        """Show the settings frame"""
+        settings_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        show_heading(
             settings_frame,
-            font=(None, 11, 'bold'),
-            text='Colours:')
-        heading.grid(sticky=tkinter.W, columnspan=4)
+            'Original file:',
+            sticky=tkinter.W,
+            columnspan=4)
+        label = tkinter.Label(
+            settings_frame,
+            textvariable=self.tkvars.file_name)
+        label.grid(sticky=tkinter.W, columnspan=5)
+        choose_button = tkinter.Button(
+            settings_frame,
+            text='Choose another file',
+            command=self.do_choose_image)
+        choose_button.grid(sticky=tkinter.W, columnspan=4)
+        show_heading(
+            settings_frame,
+            'Display:',
+            sticky=tkinter.W,
+            columnspan=4)
+        label = tkinter.Label(settings_frame, text=scale_factor)
+        label.grid(sticky=tkinter.W, columnspan=4)
+        self.__show_shape_settings(
+            settings_frame,
+            fixed_tilesize=fixed_tilesize,
+            allowed_shapes=allowed_shapes)
+        show_heading(
+            settings_frame,
+            'Colours:',
+            sticky=tkinter.W,
+            columnspan=4)
         label = tkinter.Label(
             settings_frame,
             text='Current selection:')
@@ -621,462 +1159,48 @@ class UserInterface:
             row=label.grid_info()['row'], column=1, columnspan=3)
         settings_frame.columnconfigure(4, weight=100)
         settings_frame.grid(row=0, column=1, **self.grid_fullwidth)
-        self.toggle_height()
+        self.__do_toggle_height()
 
-    def panel_select_area(self):
-        """Show the image on a canvas and let
-        the user select the area to be pixelated
-        """
-        self.show_settings_frame()
-        image_frame = tkinter.Frame(
-            self.widgets.action_area,
-            **self.with_border)
-        self.widgets.canvas = tkinter.Canvas(
-            image_frame,
-            width=CANVAS_WIDTH,
-            height=CANVAS_HEIGHT)
-        self.vars.tk_image = self.vars.image.get_tk_image(
-            self.vars.image.original)
-        self.widgets.canvas.create_image(
-            0, 0,
-            image=self.vars.tk_image,
-            anchor=tkinter.NW,
-            tags='image')
-        self.widgets.canvas.grid()
-        self.draw_indicator()
-        self.apply_pixelation()
-        self.vars.trace = True
-        # add bindings to create a new selector
-        self.widgets.canvas.tag_bind(
-            'image', "<ButtonPress-1>", self.new_selection_drag_start)
-        self.widgets.canvas.tag_bind(
-            'image', "<ButtonRelease-1>", self.new_selection_drag_stop)
-        self.widgets.canvas.tag_bind(
-            'image', "<B1-Motion>", self.new_selection_drag)
-        image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
-
-    def toggle_height(self):
-        """Toggle height spinbox to follow width"""
-        if not self.widgets.height:
-            return
-        #
-        if self.tkvars.selection.shape.get() in (CIRCLE, SQUARE):
-            self.widgets.height.config(
-                state=tkinter.DISABLED,
-                textvariable=self.tkvars.selection.width)
+    def trigger_button_states(self, *unused_arguments):
+        """Trigger undo, apply and save button states changes"""
+        if self.vars.undo_buffer:
+            desired_undo_state = tkinter.NORMAL
         else:
-            self.widgets.height.config(
-                state='readonly',
-                textvariable=self.tkvars.selection.height)
+            desired_undo_state = tkinter.DISABLED
         #
-
-    def apply_pixelation(self):
-        """Apply the pixelation to the image and update the preview"""
-        self.vars.image.set_tilesize(
-            self.tkvars.selection.tilesize.get())
-        width = self.tkvars.selection.width.get()
-        if self.tkvars.selection.shape.get() in (CIRCLE, SQUARE):
-            height = width
-        else:
-            height = self.tkvars.selection.height.get()
-        #
-        self.vars.image.set_shape(
-            (self.tkvars.selection.center_x.get(),
-             self.tkvars.selection.center_y.get()),
-            SHAPES[self.tkvars.selection.shape.get()],
-            (width, height))
-        self.show_image()
-
-    def show_image(self):
-        """Show image or preview according to the show_preview setting"""
-        if self.tkvars.show_preview.get():
-            source_image = self.vars.image.result
-        else:
-            source_image = self.vars.image.original
-        #
-        self.widgets.canvas.delete('image')
-        self.vars.tk_image = self.vars.image.get_tk_image(
-            source_image)
-        self.widgets.canvas.create_image(
-            0, 0,
-            image=self.vars.tk_image,
-            anchor=tkinter.NW,
-            tags='image')
-        self.widgets.canvas.tag_lower('image', 'indicator')
-
-    def draw_indicator(self, stipple='gray12'):
-        """Draw the pixelation selector on the canvas,
-        its coordinates determined by the px_* variables
-        """
-        width = self.vars.image.to_display_size(
-            self.tkvars.selection.width.get())
-        if self.tkvars.selection.shape.get() in (CIRCLE, SQUARE):
-            height = width
-        else:
-            height = self.vars.image.to_display_size(
-                self.tkvars.selection.height.get())
-        #
-        center_x = self.vars.image.to_display_size(
-            self.tkvars.selection.center_x.get())
-        center_y = self.vars.image.to_display_size(
-            self.tkvars.selection.center_y.get())
-        left = center_x - width // 2
-        right = left + width
-        top = center_y - height // 2
-        bottom = top + height
-        shape = self.tkvars.selection.shape.get()
-        self.widgets.canvas.delete('indicator')
-        if shape in (OVAL, CIRCLE):
-            create_widget = self.widgets.canvas.create_oval
-        elif shape in (RECT, SQUARE):
-            create_widget = self.widgets.canvas.create_rectangle
-        #
-        current_color = self.tkvars.indicator.color.get()
-        create_widget(
-            left, top, right, bottom,
-            outline=current_color,
-            fill=current_color,
-            stipple=stipple,
-            tags='indicator')
-        # add bindings to drag the selector over the image
-        self.widgets.canvas.tag_bind(
-            'indicator', "<ButtonPress-1>", self.indicator_drag_start)
-        self.widgets.canvas.tag_bind(
-            'indicator', "<ButtonRelease-1>", self.indicator_drag_stop)
-        self.widgets.canvas.tag_bind(
-            'indicator', "<B1-Motion>", self.indicator_drag)
-
-    def trigger_selection_change(self, *unused_arguments):
-        """Trigger update after selection changed"""
-        if self.vars.trace:
-            self.vars.file_touched = True
-            self.apply_pixelation()
-            self.draw_indicator()
-        #
-        self.toggle_height()
-
-    def trigger_preview_toggle(self, *unused_arguments):
-        """Trigger preview update"""
-        try:
-            self.show_image()
-        except AttributeError as error:
-            logging.warning('%s', error)
+        self.__do_update_button('undo', desired_undo_state)
+        for button_name in ('apply', 'save'):
+            self.__do_update_button(
+                button_name,
+                self.tkvars.buttonstate[button_name].get())
         #
 
     def trigger_indicator_redraw(self, *unused_arguments):
         """Trigger redrawing of the indicator"""
         try:
-            self.draw_indicator()
+            self.__do_draw_indicator()
         except AttributeError as error:
             logging.warning('%s', error)
         #
 
-    def indicator_drag_start(self, event):
-        """Begining drag of the indicator"""
-        # record the item and its location
-        self.vars.drag_data["item"] = 'indicator'
-        self.vars.drag_data["x"] = event.x
-        self.vars.drag_data["y"] = event.y
-
-    def indicator_drag(self, event):
-        """Handle dragging of the indicator"""
-        # compute how much the mouse has moved
-        delta_x = event.x - self.vars.drag_data["x"]
-        delta_y = event.y - self.vars.drag_data["y"]
-        # move the object the appropriate amount
-        self.widgets.canvas.move(
-            self.vars.drag_data["item"], delta_x, delta_y)
-        # record the new position
-        self.vars.drag_data["x"] = event.x
-        self.vars.drag_data["y"] = event.y
-        # Update pixelation center
-        bbox = self.widgets.canvas.bbox('indicator')
-        center_x = self.vars.image.from_display_size(
-            (bbox[0] + bbox[2]) // 2)
-        center_y = self.vars.image.from_display_size(
-            (bbox[1] + bbox[3]) // 2)
-        # Set the center coordinates
-        self.vars.trace = False
-        self.tkvars.selection.center_x.set(center_x)
-        self.tkvars.selection.center_y.set(center_y)
-        self.vars.trace = True
-
-    def indicator_drag_stop(self, *unused_event):
-        """End drag of an object"""
-        # reset the drag information
-        self.vars.drag_data["item"] = None
-        self.vars.drag_data["x"] = 0
-        self.vars.drag_data["y"] = 0
-        # Trigger the selection change explicitly
-        self.trigger_selection_change()
-
-    def new_selection_drag_start(self, event):
-        """Begining dragging for a new selection"""
-        # record the item and its location
-        self.vars.drag_data["item"] = 'size'
-        self.vars.drag_data["x"] = event.x
-        self.vars.drag_data["y"] = event.y
-
-    def new_selection_drag_stop(self, *unused_event):
-        """End drag for a new selection"""
-        bbox = self.widgets.canvas.bbox('size')
-        if not bbox:
-            return
-        #
-        self.widgets.canvas.delete('size')
-        left, top, right, bottom = bbox
-        center_x = self.vars.image.from_display_size((left + right) // 2)
-        center_y = self.vars.image.from_display_size((top + bottom) // 2)
-        width = self.vars.image.from_display_size(right - left)
-        height = self.vars.image.from_display_size(bottom - top)
-        if width < MINIMUM_SELECTION_SIZE:
-            width = MINIMUM_SELECTION_SIZE
-        #
-        if height < MINIMUM_SELECTION_SIZE:
-            height = MINIMUM_SELECTION_SIZE
-        #
-        # Set the selection attributes
-        self.vars.trace = False
-        self.tkvars.selection.center_x.set(center_x)
-        self.tkvars.selection.center_y.set(center_y)
-        self.tkvars.selection.width.set(width)
-        self.tkvars.selection.height.set(height)
-        self.vars.trace = True
-        # TODO: Adjust to minimum sizes
-        # Trigger the selection change explicitly
-        self.trigger_selection_change()
-
-    def new_selection_drag(self, event):
-        """Drag a new selection"""
-        current_x = event.x
-        current_y = event.y
-        [left, right] = sorted((current_x, self.vars.drag_data["x"]))
-        [top, bottom] = sorted((current_y, self.vars.drag_data["y"]))
-        # Respect "quadratic" shapes
-        if self.tkvars.selection.shape.get() in (CIRCLE, SQUARE):
-            width = right - left
-            height = bottom - top
-            new_size = max(width, height)
-            if new_size == height:
-                if current_x == left:
-                    left = right - new_size
-                else:
-                    right = left + new_size
-                #
-            elif new_size == width:
-                if current_y == top:
-                    top = bottom - new_size
-                else:
-                    bottom = top + new_size
-                #
-            #
-        #
-        self.widgets.canvas.delete('size')
-        outer_dash = (1, 1)
-        shape = self.tkvars.selection.shape.get()
-        current_color = self.tkvars.indicator.drag_color.get()
-        if shape in (OVAL, CIRCLE):
-            outer_dash = (5, 5)
-        #
-        self.widgets.canvas.create_rectangle(
-            left, top, right, bottom,
-            dash=outer_dash,
-            outline=current_color,
-            tags='size')
-        if shape in (OVAL, CIRCLE):
-            self.widgets.canvas.create_oval(
-                left, top, right, bottom,
-                dash=(1, 1),
-                outline=current_color,
-                tags='size')
-        left, top, right, bottom = self.widgets.canvas.bbox('size')
-        center_x = self.vars.image.from_display_size((left + right) // 2)
-        center_y = self.vars.image.from_display_size((top + bottom) // 2)
-        width = self.vars.image.from_display_size(right - left)
-        height = self.vars.image.from_display_size(bottom - top)
-        # Set the selection attributes
-        self.vars.trace = False
-        self.tkvars.selection.center_x.set(center_x)
-        self.tkvars.selection.center_y.set(center_y)
-        self.tkvars.selection.width.set(width)
-        self.tkvars.selection.height.set(height)
-        self.vars.trace = True
-
-    def next_action(self):
-        """Execute the next action"""
-        current_index = PHASES.index(self.vars.current_panel)
-        next_index = current_index + 1
+    def trigger_preview_toggle(self, *unused_arguments):
+        """Trigger preview update"""
         try:
-            next_phase = PHASES[next_index]
-        except IndexError as error:
-            raise ValueError(
-                f'Phase number #{next_index} out of range') from error
-        #
-        method_display = (
-            f'Action method for phase #{next_index} ({next_phase})')
-        method_name = f'do_{next_phase})'
-        try:
-            action_method = getattr(self, method_name)
-        except AttributeError:
-            logging.warning('%s is undefined', method_display)
-        else:
-            try:
-                action_method()
-            except NotImplementedError as error:
-                raise ValueError(
-                    f'{method_display} has not been implemented yet') \
-                    from error
-            #
-        #
-        self.vars.current_phase = next_phase
-
-    def next_panel(self):
-        """Execute the next action and go to the next panel"""
-        try:
-            self.next_action()
-        except ValueError as error:
-            self.vars.errors.append(str(error))
-        #
-        self.__show_panel()
-
-    def previous_panel(self):
-        """Go to the next panel"""
-        phase_name = self.vars.current_panel
-        phase_index = PHASES.index(phase_name)
-        method_display = (
-            f'Rollback method for phase #{phase_index} ({phase_name})')
-        method_name = f'rollback_{phase_name})'
-        try:
-            rollback_method = getattr(self, method_name)
-        except AttributeError:
-            logging.warning('%s is undefined', method_display)
-        else:
-            self.vars.current_phase = PHASES[phase_index - 1]
-            try:
-                rollback_method()
-            except NotImplementedError:
-                self.vars.errors.append(
-                    f'{method_display} has not been implemented yet')
-            #
-        #
-        self.__show_panel()
-
-    def quit(self, event=None):
-        """Exit the application"""
-        del event
-        try:
-            last_applied_selection = self.vars.undo_buffer[-1][1]
-        except IndexError:
-            # Empty undo buffer
-            pass
-        else:
-            current_selection = FrozenSelection(self.tkvars.selection)
-            if current_selection != last_applied_selection and \
-                    self.tkvars.show_preview.get():
-                self.vars.file_touched = True
-            #
-        #
-        if self.vars.file_touched:
-            if messagebox.askyesno('Unsaved Changes', 'Save your changes?'):
-                if not self.do_save_file():
-                    if not messagebox.askokcancel(
-                            'Changes not saved!',
-                            'Really exit without saving?',
-                            default=messagebox.CANCEL):
-                        return
-                    #
-                #
-            #
-        #
-        self.main_window.destroy()
-
-    def show_about(self):
-        """Show information about the application
-        in a modal dialog
-        """
-        gui_commons.InfoDialog(
-            self.main_window,
-            (SCRIPT_NAME,
-             'Version: {0}\nProject homepage: {1}'.format(
-                VERSION, HOMEPAGE)),
-            ('License:', LICENSE_TEXT),
-            title='About…')
+            self.__do_show_image()
+        except AttributeError as error:
+            logging.warning('%s', error)
         #
 
-    def __show_errors(self):
-        """Show errors if there are any"""
-        if self.vars.errors:
-            gui_commons.InfoDialog(
-                self.main_window,
-                ('Errors:', '\n'.join(self.vars.errors)),
-                title='Errors occurred!')
-            self.vars.errors.clear()
+    def trigger_selection_change(self, *unused_arguments):
+        """Trigger update after selection changed"""
+        if self.vars.trace:
+            self.vars.unapplied_changes = True
+            self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
+            self.tkvars.buttonstate.save.set(tkinter.NORMAL)
+            self.__do_pixelate()
+            self.__do_draw_indicator()
         #
-
-    def __show_panel(self):
-        """Show a panel.
-        Add the "Previous", "Next", "Choose another relase",
-        "About" and "Quit" buttons at the bottom
-        """
-        try:
-            self.widgets.action_area.grid_forget()
-        except AttributeError:
-            pass
-        #
-        self.widgets.action_area = tkinter.Frame(self.main_window)
-        try:
-            panel_method = getattr(
-                self,
-                'panel_%s' % self.vars.current_phase)
-        except AttributeError:
-            self.vars.errors.append(
-                'Panel for Phase %r has not been implemented yet,'
-                ' going back to phase %r.' % (
-                    self.vars.current_phase,
-                    self.vars.current_panel))
-            self.vars.current_phase = self.vars.current_panel
-            panel_method = getattr(
-                self,
-                'panel_%s' % self.vars.current_phase)
-            self.vars.disable_next_button = False
-        else:
-            self.vars.current_panel = self.vars.current_phase
-        #
-        self.__show_errors()
-        panel_method()
-        self.widgets.action_area.grid(**self.grid_fullwidth)
-        #
-        buttons_area = tkinter.Frame(self.widgets.action_area)
-        #
-        buttons_grid = dict(padx=5, pady=5)
-        undo_button = tkinter.Button(
-            buttons_area,
-            text='\u21b6 Undo',
-            command=self.next_panel)
-        undo_button.grid(row=0, column=0, sticky=tkinter.E, **buttons_grid)
-        logging.info('Undo button state: %r', undo_button.cget('state'))
-        apply_button = tkinter.Button(
-            buttons_area,
-            text='\u2713 Apply',
-            command=self.do_apply_changes)
-        apply_button.grid(row=0, column=1, sticky=tkinter.E, **buttons_grid)
-        save_button = tkinter.Button(
-            buttons_area,
-            text='\U0001f5ab Save',
-            command=self.do_save_file)
-        save_button.grid(row=0, column=2, sticky=tkinter.E, **buttons_grid)
-        about_button = tkinter.Button(
-            buttons_area,
-            text='\u24d8 About',
-            command=self.show_about)
-        about_button.grid(row=1, column=0, sticky=tkinter.E, **buttons_grid)
-        quit_button = tkinter.Button(
-            buttons_area,
-            text='\u23fb Quit',
-            command=self.quit)
-        quit_button.grid(row=1, column=2, sticky=tkinter.E, **buttons_grid)
-        self.widgets.action_area.rowconfigure(1, weight=100)
-        buttons_area.grid(row=2, column=1, sticky=tkinter.E)
+        self.__do_toggle_height()
 
 
 #
