@@ -5,7 +5,11 @@ GUI scripts to partially pixelate images or short video clips
 ## Requirements
 
 - Python 3 (<https://www.python.org/>)
-- Pillow (<https://pypi.org/project/Pillow/>)
+- Python modules:
+  - Pillow (<https://pypi.org/project/Pillow/>), including the tkimage submodule.
+    In Debian, you require the packages `python3-pil` and `python3-pil.imagetk`.
+  - Tkinter (usually part of the Python distribution).
+    In Debian, you require the package `python3-tk`.
 - FFmpeg (<http://ffmpeg.org/>) for editing videos
 
 ## Usage
