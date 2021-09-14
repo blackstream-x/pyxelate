@@ -40,9 +40,9 @@ DEFAULT_CANVAS_SIZE = (720, 405)
 def get_supported_extensions():
     """Get file name extensions supported by PIL"""
     prx_separator_line = re.compile('^-+$', re.M)
-    prx_comma_blank = re.compile(',\s+')
-    prx_extensions = re.compile('^Extensions:\s+')
-    prx_capabilities = re.compile('^Features:\s+')
+    prx_comma_blank = re.compile(r',\s+')
+    prx_extensions = re.compile(r'^Extensions:\s+')
+    prx_capabilities = re.compile(r'^Features:\s+')
     open_support = set()
     save_support = set()
     pil_info = io.StringIO()
