@@ -28,4 +28,12 @@ Select "Image files" and "Video files" on the "Appearance Conditions" tab.
 
 ## Windows Explorer
 
-_(tba)_
+Create a new `.cmd` file containing the following:
+
+```
+start pythonw \path\to\autoselect.py %1
+```
+
+and put a link to that file into the `%APPDATA%\Microsoft\Windows\SendTo` directory.
+
+After that, you can right-click a file in Windows Explorer and click your link in the **Send to** submenu
