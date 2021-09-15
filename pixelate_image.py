@@ -475,7 +475,8 @@ class UserInterface:
                 selected_file = filedialog.askopenfilename(
                     initialdir=initial_dir,
                     filetypes=filetypes,
-                    parent=self.main_window)
+                    parent=self.main_window,
+                    title='Load an image file')
                 if not selected_file:
                     if quit_on_empty_choice:
                         self.quit()
@@ -487,7 +488,8 @@ class UserInterface:
             # check for an supported file type,
             # and show an error dialog and retry
             # if the selected file is not an image
-            if file_path.suffix not in self.vars.open_support:
+            if self.vars.open_support and \
+                    file_path.suffix not in self.vars.open_support:
                 messagebox.showerror(
                     'Unsupported file type',
                     f'{file_path.name!r} is not a supported image file.',
@@ -507,7 +509,17 @@ class UserInterface:
                 #
             #
             # Set original_path and read image data
-            self.__do_load_image(file_path)
+            try:
+                self.__do_load_image(file_path)
+            except OSError as error:
+                messagebox.showerror(
+                    'Load error',
+                    str(error),
+                    icon=messagebox.ERROR)
+                initial_dir = str(file_path.parent)
+                file_path = None
+                continue
+            #
             break
         #
         self.vars.undo_buffer.clear()
@@ -515,7 +527,7 @@ class UserInterface:
         self.tkvars.buttonstate.save.set(tkinter.DISABLED)
         self.next_panel()
 
-    def __do_draw_indicator(self, stipple='gray12'):
+    def __do_draw_indicator(self, stipple=None):
         """Draw the pixelation selector on the canvas,
         its coordinates determined by the px_* variables
         """
@@ -547,12 +559,15 @@ class UserInterface:
             create_widget = canvas.create_rectangle
         #
         current_color = self.tkvars.indicator.color.get()
+        filling = dict(width=5)
+        if stipple:
+            filling = dict(width=1, fill=current_color, stipple=stipple)
+        #
         create_widget(
             left, top, right, bottom,
             outline=current_color,
-            fill=current_color,
-            stipple=stipple,
-            tags='indicator')
+            tags='indicator',
+            **filling)
         # add bindings to drag the selector over the image
         canvas.tag_bind(
             'indicator', "<ButtonPress-1>", self.cb_indicator_drag_start)
@@ -563,7 +578,6 @@ class UserInterface:
 
     def __do_load_image(self, file_path):
         """Load the image"""
-        self.vars.original_path = file_path
         self.vars.image = pixelations.ImagePixelation(
             file_path, canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
         # set selection sizes and reduce them
@@ -596,7 +610,8 @@ class UserInterface:
         #
         # set the show_preview variable by default
         self.tkvars.show_preview.set(1)
-        # set the displayed file name
+        # set the original path and displayed file name
+        self.vars.original_path = file_path
         self.tkvars.file_name.set(file_path.name)
         self.vars.unapplied_changes = False
 
@@ -955,7 +970,7 @@ class UserInterface:
         buttons_grid = dict(padx=5, pady=5, sticky=tkinter.E)
         self.widgets.buttons.undo = tkinter.Button(
             buttons_area,
-            text='\u21b6 Undo',
+            text='\u238c Undo',
             command=self.do_undo)
         self.widgets.buttons.undo.grid(row=0, column=0, **buttons_grid)
         self.widgets.buttons.apply = tkinter.Button(
@@ -963,10 +978,17 @@ class UserInterface:
             text='\u2713 Apply',
             command=self.do_apply_changes)
         self.widgets.buttons.apply.grid(row=0, column=1, **buttons_grid)
-        self.widgets.buttons.save = tkinter.Button(
-            buttons_area,
-            text='\U0001f5ab Save',
-            command=self.do_save_file)
+        try:
+            self.widgets.buttons.save = tkinter.Button(
+                buttons_area,
+                text='\U0001f5ab Save',
+                command=self.do_save_file)
+        except tkinter.TclError:
+            self.widgets.buttons.save = tkinter.Button(
+                buttons_area,
+                text='\u2386 Save',
+                command=self.do_save_file)
+        #
         self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
         self.trigger_button_states()
         about_button = tkinter.Button(
