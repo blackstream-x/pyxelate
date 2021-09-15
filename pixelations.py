@@ -147,7 +147,8 @@ def pixelated(original_image, tilesize=DEFAULT_TILESIZE):
         (oversize_width, oversize_height),
         color=most_frequent_color(original_image))
     oversized.paste(original_image)
-    reduced = oversized.resize((reduced_width, reduced_height), resample=0)
+    reduced = oversized.resize(
+        (reduced_width, reduced_height), resample=Image.BICUBIC)
     oversized = reduced.resize(
         (oversize_width, oversize_height), resample=0)
     return oversized.crop((0, 0, original_width, original_height))
