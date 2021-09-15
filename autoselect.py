@@ -113,7 +113,7 @@ def install_nautilus_script(name):
 
 def start_matching_script(file_path):
     """Start the script suitable for the given file path"""
-    file_type = mimetypes.guess_type(file_path)[0]
+    file_type = mimetypes.guess_type(str(file_path))[0]
     matching_script = None
     if file_type:
         if file_type.startswith('image/'):
@@ -123,9 +123,13 @@ def start_matching_script(file_path):
         #
     #
     if matching_script:
-        return subprocess.run(
-            (str(SCRIPT_PATH.parent / matching_script), str(file_path)),
-            check=True).returncode
+        command = []
+        if sys.platform == 'win32':
+            command = ['pythonw']
+        #
+        command.append(str(SCRIPT_PATH.parent / matching_script))
+        command.append(str(file_path))
+        return subprocess.run(command, check=True).returncode
     #
     messagebox.showerror(
         'Wrong file type',
