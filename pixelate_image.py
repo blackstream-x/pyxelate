@@ -1007,7 +1007,7 @@ class UserInterface:
                 increment=TILESIZE_INCREMENT,
                 justify=tkinter.RIGHT,
                 state='readonly',
-                width=3,
+                width=4,
                 textvariable=self.tkvars.selection.tilesize)
         #
         label.grid(sticky=tkinter.W, column=0)
