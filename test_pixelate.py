@@ -13,7 +13,9 @@ import logging
 import pathlib
 import sys
 
-import pixelations
+# local module
+
+from pyxelate import pixelations
 
 
 #

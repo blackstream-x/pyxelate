@@ -24,8 +24,8 @@ from tkinter import messagebox
 
 # local modules
 
-import gui_commons
-import pixelations
+from pyxelate import gui_commons
+from pyxelate import pixelations
 
 
 #
