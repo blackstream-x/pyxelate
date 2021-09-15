@@ -46,7 +46,13 @@ def get_supported_extensions():
     open_support = set()
     save_support = set()
     pil_info = io.StringIO()
-    features.pilinfo(supported_formats=True, out=pil_info)
+    try:
+        features.pilinfo(supported_formats=True, out=pil_info)
+    except AttributeError:
+        # ignore nonexisting function features.pilinfo
+        # in very old PIL(LOW) versions
+        pass
+    #
     pil_info.seek(0)
     for block in prx_separator_line.split(pil_info.read()):
         if 'Extensions:' in block and 'Features:' in block:
