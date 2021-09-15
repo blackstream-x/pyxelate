@@ -98,6 +98,8 @@ TILESIZE_INCREMENT = 5
 MINIMUM_SELECTION_SIZE = 20
 INITIAL_SELECTION_SIZE = 50
 
+INDICATOR_OUTLINE_WIDTH = 9
+
 POSSIBLE_INDICATOR_COLORS = (
     'white', 'black', 'red', 'green', 'blue', 'cyan', 'yellow', 'magenta')
 
@@ -559,15 +561,17 @@ class UserInterface:
             create_widget = canvas.create_rectangle
         #
         current_color = self.tkvars.indicator.color.get()
-        filling = dict(width=5)
+        appearance = dict(
+            width=INDICATOR_OUTLINE_WIDTH,
+            outline=current_color,
+            tags='indicator')
         if stipple:
-            filling = dict(width=1, fill=current_color, stipple=stipple)
+            appearance.update(
+                dict(width=1, fill=current_color, stipple=stipple))
         #
         create_widget(
             left, top, right, bottom,
-            outline=current_color,
-            tags='indicator',
-            **filling)
+            **appearance)
         # add bindings to drag the selector over the image
         canvas.tag_bind(
             'indicator', "<ButtonPress-1>", self.cb_indicator_drag_start)
