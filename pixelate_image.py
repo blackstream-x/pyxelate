@@ -1134,12 +1134,12 @@ class UserInterface:
             allowed_shapes=allowed_shapes)
         show_heading(
             settings_frame,
-            'Colours:',
+            'Indicator colours:',
             sticky=tkinter.W,
             columnspan=4)
         label = tkinter.Label(
             settings_frame,
-            text='Current selection:')
+            text='Current:')
         color_opts = tkinter.OptionMenu(
             settings_frame,
             self.tkvars.indicator.color,
@@ -1150,7 +1150,7 @@ class UserInterface:
             row=label.grid_info()['row'], column=1, columnspan=3)
         label = tkinter.Label(
             settings_frame,
-            text='New selection:')
+            text='New:')
         color_opts = tkinter.OptionMenu(
             settings_frame,
             self.tkvars.indicator.drag_color,
