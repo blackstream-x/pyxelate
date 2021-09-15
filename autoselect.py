@@ -123,11 +123,20 @@ def start_matching_script(file_path):
         #
     #
     if matching_script:
+        matching_script_path = SCRIPT_PATH.parent / matching_script
+        if not matching_script_path.is_file():
+            messagebox.showerror(
+                'Script not available',
+                f'The script handling {file_type} files'
+                ' is not available yet.',
+                icon=messagebox.ERROR)
+            return RETURNCODE_ERROR
+        #
         command = []
         if sys.platform == 'win32':
             command = ['pythonw']
         #
-        command.append(str(SCRIPT_PATH.parent / matching_script))
+        command.append(str(matching_script_path))
         command.append(str(file_path))
         return subprocess.run(command, check=True).returncode
     #
