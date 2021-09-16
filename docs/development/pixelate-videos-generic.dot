@@ -1,15 +1,15 @@
 digraph "pixelate-videos generic workflow" {
 
-load_video[label="Load Video", shape=rect]
+load_video[label="Load video", shape=rect]
 split_video[label="Split into\nsingle frames", shape=parallelogram]
 start_frame[label="Select\nstart frame", shape=rect]
 start_position[label="Select pixelation\nstart position", shape=rect]
 end_frame[label="Select\nend frame", shape=rect]
 end_position[label="Select pixelation\nend position", shape=rect]
 apply_pixelation[label="Pixelate\nframe range", shape=parallelogram]
-show_preview[label="Show preview\nas flip book", shape=rect]
+show_preview[label="Show preview\nas a flip book", shape=rect]
 set_save_params[label="Set save\nparameters", shape=rect]
-save_video[label="Save Video", shape=parallelogram]
+save_video[label="Assemble video", shape=parallelogram]
 quit[label="Quit", shape=rect]
 
 in_original_video[label="Original\nvideo", shape=cylinder]
