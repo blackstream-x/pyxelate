@@ -8,7 +8,6 @@ end_frame[label="Select\nend frame", shape=rect]
 end_position[label="Select pixelation\nend position", shape=rect]
 apply_pixelation[label="Pixelate\nframe range", shape=parallelogram]
 show_preview[label="Show preview\nas flip book", shape=rect]
-decision_show_preview[label="Show\npreview?", shape=diamond]
 set_save_params[label="Set save\nparameters", shape=rect]
 save_video[label="Save Video", shape=parallelogram]
 quit[label="Quit", shape=rect]
@@ -65,11 +64,9 @@ end_frame -> end_position;
 in_end_frame -> end_position -> out_end_position
 end_position -> apply_pixelation;
 in_original_frames_3 -> in_frames_and_positions -> apply_pixelation -> out_modified_frames
-apply_pixelation -> decision_show_preview;
-decision_show_preview -> show_preview[label="yes"];
+apply_pixelation -> show_preview;
 in_modified_frames_1 -> show_preview
 show_preview -> set_save_params;
-decision_show_preview -> set_save_params[label="no"];
 set_save_params -> save_video
 in_original_audio_stream -> save_video[style=dotted]
 in_modified_frames_2 -> save_video -> out_result_video
