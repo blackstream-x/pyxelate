@@ -388,8 +388,10 @@ class BasePixelation:
         #
         return length
 
-    def resized_to_canvas(self, source_image):
-        """Return the image resized to canvas size (or original size)"""
+    def downsized_to_canvas(self, source_image):
+        """Return the image downsized to canvas size
+        (or original size if no downsizing is required)
+        """
         if self.display_ratio > 1:
             return source_image.resize(
                 (int(source_image.width / self.display_ratio),
@@ -399,11 +401,11 @@ class BasePixelation:
         return source_image
 
     def get_tk_image(self, source_image):
-        """Return the image resized to canvas size and
+        """Return the image downsized to canvas size and
         as a PhotoImage instance for Tkinter
         """
         return ImageTk.PhotoImage(
-            self.resized_to_canvas(source_image))
+            self.downsized_to_canvas(source_image))
 
 
 class ImagePixelation(BasePixelation):
