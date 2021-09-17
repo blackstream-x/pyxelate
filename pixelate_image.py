@@ -674,14 +674,13 @@ class UserInterface:
         if not canvas:
             return
         #
-        if self.tkvars.show_preview.get():
-            source_image = self.vars.image.result
-        else:
-            source_image = self.vars.image.original
-        #
         canvas.delete('image')
-        self.vars.tk_image = self.vars.image.get_tk_image(
-            source_image)
+        if self.tkvars.show_preview.get():
+            self.vars.tk_image = self.vars.image.get_tk_image(
+                self.vars.image.result)
+        else:
+            self.vars.tk_image = self.vars.image.tk_original
+        #
         canvas.create_image(
             0, 0,
             image=self.vars.tk_image,
@@ -840,13 +839,7 @@ class UserInterface:
         """Show the image on a canvas and let
         the user select the area to be pixelated
         """
-        if self.vars.image.display_ratio > 1:
-            scale_factor = 'Size: scaled down (factor: %r)' % float(
-                self.vars.image.display_ratio)
-        else:
-            scale_factor = 'Size: original dimensions'
-        #
-        self.__show_settings_frame(scale_factor=scale_factor)
+        self.__show_settings_frame()
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
@@ -854,8 +847,7 @@ class UserInterface:
             image_frame,
             width=CANVAS_WIDTH,
             height=CANVAS_HEIGHT)
-        self.vars.tk_image = self.vars.image.get_tk_image(
-            self.vars.image.original)
+        self.vars.tk_image = self.vars.image.tk_original
         self.widgets.canvas.create_image(
             0, 0,
             image=self.vars.tk_image,
@@ -1126,7 +1118,6 @@ class UserInterface:
             row=label.grid_info()['row'], column=1, columnspan=3)
 
     def __show_settings_frame(self,
-                              scale_factor='original size',
                               fixed_tilesize=False,
                               allowed_shapes=ALL_SHAPES):
         """Show the settings frame"""
@@ -1152,6 +1143,12 @@ class UserInterface:
             'Display:',
             sticky=tkinter.W,
             columnspan=4)
+        if self.vars.image.display_ratio > 1:
+            scale_factor = 'Size: scaled down (factor: %r)' % float(
+                self.vars.image.display_ratio)
+        else:
+            scale_factor = 'Size: original dimensions'
+        #
         label = tkinter.Label(settings_frame, text=scale_factor)
         label.grid(sticky=tkinter.W, columnspan=4)
         self.__show_shape_settings(

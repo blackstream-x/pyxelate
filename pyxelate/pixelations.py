@@ -230,29 +230,21 @@ class ShapesCache(Borg):
         #
 
 
-class BasePixelation:
+class BaseImage:
 
-    """Pixelation base class"""
+    """Image base class"""
 
     kw_orig = 'original image'
-    kw_px_area = 'pixelated image area'
-    kw_px_mask = 'pixelated area mask'
-    kw_mask_shape = 'mask_shape'
-    kw_result = 'resulting image'
     kw_display_ratio = 'display ratio'
+    kw_tk_original = 'canvas-sized original image for tkinter'
 
     def __init__(self,
                  image_path,
-                 tilesize=DEFAULT_TILESIZE,
                  canvas_size=DEFAULT_CANVAS_SIZE):
         """Allocate the internal cache"""
 
         self.__cache = {}
-        self.__tilesize = 0
         self.__canvas_size = (0, 0)
-        self.__shapes = ShapesCache()
-        self.shape_offset = (0, 0)
-        self.set_tilesize(tilesize)
         self.set_canvas_size(canvas_size)
         self.load_image(image_path)
         #
@@ -265,10 +257,14 @@ class BasePixelation:
         except KeyError:
             self.__cache[cache_key] = producer()
             if clear_on_miss:
-                self.__cache.pop(clear_on_miss, None)
+                self.cache_remove(clear_on_miss)
             #
             return self.__cache[cache_key]
         #
+
+    def cache_remove(self, item):
+        """Remove item from internal cache"""
+        self.__cache.pop(item, None)
 
     def load_image(self, image_path):
         """Load the image"""
@@ -277,49 +273,16 @@ class BasePixelation:
     def set_original(self, image):
         """Set the provided image as original image"""
         self.__cache[self.kw_orig] = image
-        self.__cache.pop(self.kw_px_area, None)
-        self.__cache.pop(self.kw_result, None)
-
-    def set_tilesize(self, tilesize):
-        """Set the tilesize and delete the cached pixelated results"""
-        if self.__tilesize != tilesize:
-            self.__tilesize = tilesize
-            self.__cache.pop(self.kw_px_area, None)
-            self.__cache.pop(self.kw_result, None)
-        #
+        self.cache_remove(self.kw_display_ratio)
+        self.cache_remove(self.kw_tk_original)
 
     def set_canvas_size(self, canvas_size):
         """Set the canvas size"""
         if self.__canvas_size != canvas_size:
             self.__canvas_size = canvas_size
-            self.__cache.pop(self.kw_display_ratio, None)
+            self.cache_remove(self.kw_display_ratio)
+            self.cache_remove(self.kw_tk_original)
         #
-
-    def set_shape(self, center, shape_type, size):
-        """Set the shape and delete the cached results"""
-        (pos_x, pos_y) = center
-        (width, height) = size
-        offset_x = pos_x - width // 2
-        offset_y = pos_y - height // 2
-        self.shape_offset = (offset_x, offset_y)
-        self.__cache.pop(self.kw_px_mask, None)
-        self.__cache.pop(self.kw_result, None)
-        self.__cache[self.kw_mask_shape] = self.__shapes.get_cached(
-            shape_type, size)
-
-    @property
-    def mask_shape(self):
-        """The cached mask shape"""
-        try:
-            return self.__cache[self.kw_mask_shape]
-        except KeyError as error:
-            raise ValueError('No mask shape set yet!') from error
-        #
-
-    @property
-    def tilesize(self):
-        """The pixel size"""
-        return self.__tilesize
 
     @property
     def display_ratio(self):
@@ -333,22 +296,11 @@ class BasePixelation:
         return self.__cache[self.kw_orig]
 
     @property
-    def pixelated_area(self):
-        """The pixelated area of the original image"""
-        return self.lazy_evaluation(
-            self.kw_px_area,
-            self.get_pixelated_area,
-            clear_on_miss=self.kw_result)
-
-    @property
-    def mask(self):
-        """The mask for the pixelated area"""
-        return self.lazy_evaluation(self.kw_px_mask, self.get_mask)
-
-    @property
-    def result(self):
-        """The partially pixelated image"""
-        return self.lazy_evaluation(self.kw_result, self.get_result)
+    def tk_original(self):
+        """The ImageTk.PhotoImage of the original
+        downsized to fit the canvas
+        """
+        return self.lazy_evaluation(self.kw_tk_original, self.get_tk_image)
 
     def get_display_ratio(self):
         """Get the display ratio from the image and canvas sizes"""
@@ -358,21 +310,6 @@ class BasePixelation:
         ratio_y = dimension_display_ratio(
             self.original.height, canvas_height)
         return max(ratio_x, ratio_y)
-
-    def get_mask(self):
-        """Return the mask for the pixelated image"""
-        raise NotImplementedError
-
-    def get_pixelated_area(self):
-        """Return a copy of the original image,
-        fully pixelated
-        """
-        raise NotImplementedError
-
-    def get_result(self):
-        """Return the result
-        """
-        raise NotImplementedError
 
     def from_display_size(self, display_length):
         """Return the translated display size as an integer"""
@@ -400,12 +337,102 @@ class BasePixelation:
         #
         return source_image
 
-    def get_tk_image(self, source_image):
+    def get_tk_image(self, source_image=None):
         """Return the image downsized to canvas size and
         as a PhotoImage instance for Tkinter
         """
+        if not source_image:
+            source_image = self.original
+        #
         return ImageTk.PhotoImage(
             self.downsized_to_canvas(source_image))
+
+
+class BasePixelation(BaseImage):
+
+    """Pixelation base class"""
+
+    kw_px_area = 'pixelated image area'
+    kw_px_mask = 'pixelated area mask'
+    # kw_mask_shape = 'mask_shape'
+    kw_result = 'resulting image'
+
+    def __init__(self,
+                 image_path,
+                 tilesize=DEFAULT_TILESIZE,
+                 canvas_size=DEFAULT_CANVAS_SIZE):
+        """Allocate the internal cache"""
+        super().__init__(image_path, canvas_size=canvas_size)
+        self.__mask_shape = None
+        self.__tilesize = 0
+        self.__shapes = ShapesCache()
+        self.shape_offset = (0, 0)
+        self.set_tilesize(tilesize)
+
+    def set_tilesize(self, tilesize):
+        """Set the tilesize and delete the cached pixelated results"""
+        if self.__tilesize != tilesize:
+            self.__tilesize = tilesize
+            self.cache_remove(self.kw_px_area)
+            self.cache_remove(self.kw_result)
+        #
+
+    def set_shape(self, center, shape_type, size):
+        """Set the shape and delete the cached results"""
+        (pos_x, pos_y) = center
+        (width, height) = size
+        offset_x = pos_x - width // 2
+        offset_y = pos_y - height // 2
+        self.shape_offset = (offset_x, offset_y)
+        self.cache_remove(self.kw_px_mask)
+        self.cache_remove(self.kw_result)
+        self.__mask_shape = self.__shapes.get_cached(shape_type, size)
+
+    @property
+    def mask_shape(self):
+        """The cached mask shape"""
+        if self.__mask_shape is None:
+            raise ValueError('No mask shape set yet!')
+        #
+        return self.__mask_shape
+
+    @property
+    def tilesize(self):
+        """The pixel size"""
+        return self.__tilesize
+
+    @property
+    def mask(self):
+        """The mask for the pixelated area"""
+        return self.lazy_evaluation(self.kw_px_mask, self.get_mask)
+
+    @property
+    def pixelated_area(self):
+        """The pixelated area of the original image"""
+        return self.lazy_evaluation(
+            self.kw_px_area,
+            self.get_pixelated_area,
+            clear_on_miss=self.kw_result)
+
+    @property
+    def result(self):
+        """The partially pixelated image"""
+        return self.lazy_evaluation(self.kw_result, self.get_result)
+
+    def get_mask(self):
+        """Return the mask for the pixelated image"""
+        raise NotImplementedError
+
+    def get_pixelated_area(self):
+        """Return a copy of the original image,
+        fully pixelated
+        """
+        raise NotImplementedError
+
+    def get_result(self):
+        """Return the result
+        """
+        raise NotImplementedError
 
 
 class ImagePixelation(BasePixelation):
