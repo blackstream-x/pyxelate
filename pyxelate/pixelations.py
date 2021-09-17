@@ -6,6 +6,18 @@ pixelations.py
 
 Module for pixelating parts of images
 
+Copyright (C) 2021 Rainer Schwarzbach
+
+This file is part of pyxelate.
+
+pyxelate is free software: you can redistribute it and/or modify
+it under the terms of the MIT License.
+
+pyxelate is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the LICENSE file for more details.
+
 """
 
 

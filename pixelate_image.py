@@ -44,11 +44,17 @@ if SCRIPT_PATH.is_symlink():
 #
 
 LICENSE_PATH = SCRIPT_PATH.parent / 'LICENSE'
-try:
-    LICENSE_TEXT = LICENSE_PATH.read_text()
-except OSError as error:
-    LICENSE_TEXT = '(License file is missing: %s)' % error
-#
+COPYRIGHT_NOTICE = """Copyright (C) 2021 Rainer Schwarzbach
+
+This file is part of pyxelate.
+
+pyxelate is free software: you can redistribute it and/or modify
+it under the terms of the MIT License.
+
+pyxelate is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the LICENSE file for more details."""
 
 VERSION_PATH = SCRIPT_PATH.parent / 'version.txt'
 try:
@@ -915,7 +921,7 @@ class UserInterface:
             (SCRIPT_NAME,
              'Version: {0}\nProject homepage: {1}'.format(
                 VERSION, HOMEPAGE)),
-            ('License:', LICENSE_TEXT),
+            ('Copyright/License:', COPYRIGHT_NOTICE),
             title='About…')
         #
 
