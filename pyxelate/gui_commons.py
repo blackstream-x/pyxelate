@@ -29,6 +29,42 @@ import tkinter
 #
 
 
+class TransientWindow(tkinter.Toplevel):
+
+    """Transient modal window, adapted from
+    <https://effbot.org/tkinterbook/tkinter-dialog-windows.htm>
+    """
+
+    def __init__(self,
+                 parent,
+                 title=None):
+        """Create the toplevel window"""
+        super().__init__(parent)
+        self.transient(parent)
+        if title:
+            self.title(title)
+        #
+        self.widgets = {}
+        self.parent = parent
+        self.initial_focus = self
+        self.body = tkinter.Frame(self)
+        self.create_content()
+        self.body.grid(padx=5, pady=5, sticky=tkinter.E + tkinter.W)
+        self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self.action_cancel)
+        self.initial_focus.focus_set()
+
+    def create_content(self):
+        """Add content to body -> overwrite in child classes"""
+        raise NotImplementedError
+
+    def action_cancel(self, event=None):
+        """Put focus back to the parent window"""
+        del event
+        self.parent.focus_set()
+        self.destroy()
+
+
 class ModalDialog(tkinter.Toplevel):
 
     """Adapted from

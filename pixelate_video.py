@@ -16,7 +16,7 @@ import logging
 import mimetypes
 import os
 import pathlib
-# import subprocess
+import subprocess
 import sys
 import tempfile
 import time
@@ -24,6 +24,7 @@ import tkinter
 
 from tkinter import filedialog
 from tkinter import messagebox
+from tkinter import ttk
 
 # local modules
 
@@ -69,14 +70,29 @@ except OSError as error:
 
 # Phases
 CHOOSE_VIDEO = 'choose_video'
-SELECT_AREA = 'select_area'
+START_FRAME = 'start_frame'
+START_AREA = 'start_area'
+END_FRAME = 'end_frame'
+END_AREA = 'end_area'
+PREVIEW = 'preview'
+# SELECT_AREA = 'select_area'
 
 PHASES = (
     CHOOSE_VIDEO,
-    SELECT_AREA)
+    START_FRAME,
+    START_AREA,
+    END_FRAME,
+    END_AREA,
+    PREVIEW,
+)
 
 PANEL_NAMES = {
-    SELECT_AREA: 'Select area to be pixelated'}
+    START_FRAME: 'Select pixelation start frame',
+    START_AREA: 'Select pixelation start area',
+    END_FRAME: 'Select pixelation end frame',
+    END_AREA: 'Select pixelation end area',
+    PREVIEW: 'preview',
+}
 
 CANVAS_WIDTH = 720
 CANVAS_HEIGHT = 576
@@ -116,6 +132,9 @@ POSSIBLE_INDICATOR_COLORS = (
 UNDO_SIZE = 20
 
 HEADINGS_FONT = (None, 10, 'bold')
+
+FRAME_PATTERN = 'frame%04d.jpg'
+MAX_NB_FRAMES = 9999
 
 
 #
@@ -237,6 +256,100 @@ class FrozenSelection:
         return repr(tuple(self.effective_values.values()))
 
 
+class GenericProgress(gui_commons.TransientWindow):
+
+    """Show one progressbar in a transient modal window"""
+
+    def __init__(self,
+                 parent,
+                 label=None,
+                 maximum=None,
+                 title=None):
+        """Create the toplevel window"""
+        self.label = label
+        self.maximum = maximum
+        super().__init__(parent, title=title)
+
+    def create_content(self):
+        """Create a progressbar"""
+        self.widgets['current_value'] = tkinter.IntVar()
+        label = tkinter.Label(
+            self.body,
+            text=self.label)
+        progressbar = ttk.Progressbar(
+            self.body,
+            length=CANVAS_WIDTH,
+            variable=self.widgets['current_value'],
+            maximum=self.maximum,
+            orient=tkinter.HORIZONTAL)
+        label.grid(sticky=tkinter.W)
+        progressbar.grid()
+        self.widgets['progress'] = progressbar
+
+    def set_current_value(self, current_value):
+        """Set the current value"""
+        self.widgets['current_value'].set(current_value)
+        self.widgets['progress'].update()
+        self.update_idletasks()
+
+
+class LoadProgress(gui_commons.TransientWindow):
+
+    """Load progress in a transient modal window"""
+
+    def create_content(self):
+        """Create progressbars
+        1. indeterminate bouncing while determining image properies
+        2. determinate for tracking the movie being split into frames
+        """
+        label = tkinter.Label(
+            self.body,
+            text='Determining video properties…')
+        progressbar = ttk.Progressbar(
+            self.body,
+            length=CANVAS_WIDTH,
+            mode='indeterminate',
+            orient=tkinter.HORIZONTAL)
+        label.grid(sticky=tkinter.W)
+        progressbar.grid()
+        self.widgets['properties_progress'] = progressbar
+        self.widgets['current_frame'] = tkinter.IntVar()
+        label = tkinter.Label(
+            self.body,
+            text='Splitting video into frames…')
+        progressbar = ttk.Progressbar(
+            self.body,
+            length=CANVAS_WIDTH,
+            variable=self.widgets['current_frame'],
+            orient=tkinter.HORIZONTAL)
+        label.grid(sticky=tkinter.W)
+        progressbar.grid()
+        self.widgets['split_progress'] = progressbar
+
+    def start_properties(self):
+        """Start the properties progressbar"""
+        self.widgets['properties_progress'].start()
+        self.update_idletasks()
+
+    def start_split(self, nb_frames):
+        """Stop the properties progressbar
+        and set the maximum of the split progressbar
+        """
+        self.widgets['properties_progress'].stop()
+        self.widgets['split_progress'].config(maximum=nb_frames)
+        self.update_idletasks()
+
+    def update_properties(self):
+        """Start the properties progressbar"""
+        self.widgets['properties_progress'].update()
+
+    def set_current_frame(self, current_frame_number):
+        """Set the current frame number"""
+        self.widgets['current_frame'].set(current_frame_number)
+        self.widgets['split_progress'].update()
+        self.update_idletasks()
+
+
 class UserInterface:
 
     """GUI using tkinter"""
@@ -260,14 +373,34 @@ class UserInterface:
         self.vars = Namespace(
             original_frames=None,
             modified_frames=None,
+            nb_frames=None,
+            framerate=None,
             current_panel=None,
             errors=[],
             tk_image=None,
             image=None,
+            vframe=None,
             original_path=file_path,
             trace=False,
             unapplied_changes=False,
             undo_buffer=[],
+            frame_limits=Namespace(
+                minimum=1,
+                maximum=1),
+            start_at=Namespace(
+                frame=None,
+                shape=None,
+                center_x=None,
+                center_y=None,
+                width=None,
+                height=None),
+            end_at=Namespace(
+                frame=None,
+                shape=None,
+                center_x=None,
+                center_y=None,
+                width=None,
+                height=None),
             drag_data=Namespace(
                 x=0,
                 y=0,
@@ -276,6 +409,8 @@ class UserInterface:
         self.tkvars = Namespace(
             file_name=tkinter.StringVar(),
             show_preview=tkinter.IntVar(),
+            current_frame=tkinter.IntVar(),
+            end_frame=tkinter.IntVar(),
             selection=Namespace(
                 center_x=tkinter.IntVar(),
                 center_y=tkinter.IntVar(),
@@ -306,6 +441,9 @@ class UserInterface:
         self.tkvars.indicator.color.trace_add(
             'write', self.trigger_indicator_redraw)
         #
+        self.tkvars.current_frame.trace_add(
+            'write', self.trigger_change_frame)
+        #
         self.widgets = Namespace(
             action_area=None,
             # buttons_area=None,
@@ -313,6 +451,7 @@ class UserInterface:
                 undo=None,
                 apply=None,
                 save=None),
+            frame_canvas=None,
             canvas=None,
             height=None)
         self.do_choose_video(
@@ -517,7 +656,9 @@ class UserInterface:
             # Set original_path and read image data
             try:
                 self.__do_load_video(file_path)
-            except OSError as error:
+            except (OSError,
+                    ValueError,
+                    subprocess.CalledProcessError) as error:
                 messagebox.showerror(
                     'Load error',
                     str(error),
@@ -589,21 +730,88 @@ class UserInterface:
         showing a progress bar (in an auto-closing modal window?)
         """
         # Get audio and video stream information
+        progress = LoadProgress(
+            self.main_window,
+            title=f'Loading {file_path.name} …')
+        progress.start_properties()
         logging.debug('Examining audio stream …')
         has_audio = bool(
             ffmw.get_stream_info(file_path,
                                  select_streams='a',
                                  show_entries=ffmw.ENTRIES_ALL))
+        progress.update_properties()
         logging.info('%r has audio: %r', file_path.name, has_audio)
         logging.debug('Examining video stream …')
-        ffmw.get_stream_info(file_path, select_streams='v')
+        video_properties = ffmw.get_stream_info(
+            file_path, select_streams='v')
+        progress.update_properties()
+        # TODO: validate video properties,
+        # especially nb_frames and frame rates
+        nb_frames = int(video_properties['nb_frames'])
+        if nb_frames > MAX_NB_FRAMES:
+            progress.action_cancel()
+            raise ValueError(f'To many frames (maximum is {MAX_NB_FRAMES})!')
+        #
+        progress.start_split(nb_frames)
         # Create temorary directory for original frames
+        self.vars.nb_frames = nb_frames
         self.vars.original_frames = tempfile.TemporaryDirectory()
         logging.info('Created tempdir %r', self.vars.original_frames.name)
-        # XXX: breakpoint for now
-        logging.warning('The development version currently ends here.')
-        self.quit()
-        sys.exit(0)
+        # Split into frames
+        kwargs = dict(
+            stderr=ffmw.AsynchronousLineReader,
+            stdout=ffmw.AsynchronousLineReader)
+        if sys.platform != 'win32':
+            kwargs['close_fds'] = True
+        #
+        collected_stdout = []
+        collected_stderr = []
+        process_info = ffmw.get_streams_and_process(
+            (
+                'ffmpeg', '-v', 'error', '-progress', '-',
+                '-i', str(file_path),
+                os.path.join(self.vars.original_frames.name, FRAME_PATTERN)),
+            **kwargs)
+        process = process_info['process']
+        stdout_reader = process_info['stdout']
+        stderr_reader = process_info['stderr']
+        while not stdout_reader.eof() or not stderr_reader.eof():
+            # Show what has been received from stderr and stdout,
+            # then sleep a short time before polling again
+            for line in stderr_reader.readlines():
+                line = line.decode().rstrip()
+                collected_stderr.append(line)
+                logging.error(line)
+            #
+            for line in stdout_reader.readlines():
+                line = line.decode().rstrip()
+                collected_stdout.append(line)
+                if line.startswith('frame='):
+                    value = line.split('=', 1)[1]
+                    progress.set_current_frame(int(value))
+                #
+            time.sleep(.1)
+        # Cleanup:
+        # Wait for the threads to end and close the file descriptors
+        stderr_reader.join()
+        stdout_reader.join()
+        process.stderr.close()
+        process.stdout.close()
+        progress.action_cancel()
+        completed_process = subprocess.CompletedProcess(
+            args=process.args,
+            returncode=process.wait(),
+            stdout='\n'.join(collected_stdout),
+            stderr='\n'.join(collected_stderr))
+        completed_process.check_returncode()
+
+        #
+# =============================================================================
+#         # XXX: breakpoint for now
+#         logging.warning('The development version currently ends here.')
+#         self.quit()
+#         sys.exit(0)
+# =============================================================================
         # set the original path and displayed file name
         self.vars.original_path = file_path
         self.tkvars.file_name.set(file_path.name)
@@ -825,11 +1033,39 @@ class UserInterface:
         #
         self.__show_panel()
 
+    def panel_start_frame(self):
+        """Select the start frame using a slider
+        abd show that frame on a canvas
+        """
+        image_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        self.vars.frame_limits.mimimum = 1
+        self.vars.frame_limits.maximum = self.vars.nb_frames - 5
+        frames_slider = tkinter.Scale(
+            image_frame,
+            from_=self.vars.frame_limits.minimum,
+            to=self.vars.frame_limits.maximum,
+            length=CANVAS_WIDTH,
+            label='Start frame:',
+            orient=tkinter.HORIZONTAL,
+            variable=self.tkvars.current_frame)
+        frames_slider.grid()
+        self.widgets.frame_canvas = tkinter.Canvas(
+            image_frame,
+            width=CANVAS_WIDTH,
+            height=CANVAS_HEIGHT)
+        self.widgets.frame_canvas.grid()
+        self.vars.trace = True
+        self.trigger_change_frame()
+        image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
+        self.__show_frameselection_frame('Start')
+
     def panel_select_area(self):
         """Show the image on a canvas and let
         the user select the area to be pixelated
         """
-        self.__show_settings_frame()
+        self.__show_settings_frame('Start')
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
@@ -1116,40 +1352,79 @@ class UserInterface:
             sticky=tkinter.W,
             row=label.grid_info()['row'], column=1, columnspan=3)
 
+    def __show_frameinfo(self,
+                         parent_frame,
+                         frame_position,
+                         change_enabled=False):
+        """Show information about the current video frame"""
+        show_heading(
+            parent_frame,
+            'Original file:',
+            sticky=tkinter.W,
+            columnspan=4)
+        label = tkinter.Label(
+            parent_frame,
+            textvariable=self.tkvars.file_name)
+        label.grid(sticky=tkinter.W, columnspan=5)
+        choose_button = tkinter.Button(
+            parent_frame,
+            text='Choose another file',
+            command=self.do_choose_video)
+        choose_button.grid(sticky=tkinter.W, columnspan=4)
+        show_heading(
+            parent_frame,
+            f'{frame_position} frame:',
+            sticky=tkinter.W,
+            columnspan=4)
+        label = tkinter.Label(
+            parent_frame,
+            text='Number:')
+        if change_enabled:
+            frame_number = tkinter.Spinbox(
+                parent_frame,
+                from_=self.vars.frame_limits.minimum,
+                to=self.vars.frame_limits.maximum,
+                textvariable=self.tkvars.current_frame,
+                state='readonly',
+                width=4)
+        else:
+            frame_number = tkinter.Label(
+                parent_frame,
+                textvariable=self.tkvars.current_frame)
+        #
+        label.grid(sticky=tkinter.W)
+        frame_number.grid(
+            sticky=tkinter.W, columnspan=3,
+            column=1, row=label.grid_info()['row'])
+        if self.vars.vframe.display_ratio > 1:
+            scale_factor = 'Size: scaled down (factor: %r)' % float(
+                self.vars.vframe.display_ratio)
+        else:
+            scale_factor = 'Size: original dimensions'
+        #
+        label = tkinter.Label(parent_frame, text=scale_factor)
+        label.grid(sticky=tkinter.W, columnspan=4)
+
+    def __show_frameselection_frame(self, frame_position):
+        """Show the settings frame"""
+        frameselection_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        self.__show_frameinfo(
+            frameselection_frame, frame_position, change_enabled=True)
+        frameselection_frame.columnconfigure(4, weight=100)
+        frameselection_frame.grid(row=0, column=1, **self.grid_fullwidth)
+
     def __show_settings_frame(self,
+                              frame_position,
                               fixed_tilesize=False,
                               allowed_shapes=ALL_SHAPES):
         """Show the settings frame"""
         settings_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
-        show_heading(
-            settings_frame,
-            'Original file:',
-            sticky=tkinter.W,
-            columnspan=4)
-        label = tkinter.Label(
-            settings_frame,
-            textvariable=self.tkvars.file_name)
-        label.grid(sticky=tkinter.W, columnspan=5)
-        choose_button = tkinter.Button(
-            settings_frame,
-            text='Choose another file',
-            command=self.do_choose_video)
-        choose_button.grid(sticky=tkinter.W, columnspan=4)
-        show_heading(
-            settings_frame,
-            'Display:',
-            sticky=tkinter.W,
-            columnspan=4)
-        if self.vars.image.display_ratio > 1:
-            scale_factor = 'Size: scaled down (factor: %r)' % float(
-                self.vars.image.display_ratio)
-        else:
-            scale_factor = 'Size: original dimensions'
-        #
-        label = tkinter.Label(settings_frame, text=scale_factor)
-        label.grid(sticky=tkinter.W, columnspan=4)
+        self.__show_frameinfo(
+            settings_frame, frame_position, change_enabled=False)
         self.__show_shape_settings(
             settings_frame,
             fixed_tilesize=fixed_tilesize,
@@ -1197,6 +1472,40 @@ class UserInterface:
             self.__do_update_button(
                 button_name,
                 self.tkvars.buttonstate[button_name].get())
+        #
+
+    def trigger_change_frame(self, *unused_arguments):
+        """Trigger a change of the frame"""
+        if not self.vars.trace:
+            return
+        #
+        try:
+            self.widgets.frame_canvas.delete('vframe')
+        except AttributeError as error:
+            logging.warning('%s', error)
+        #
+        current_frame = self.tkvars.current_frame.get()
+        if current_frame < self.vars.frame_limits.minimum:
+            current_frame = self.vars.frame_limits.minimum
+        elif current_frame > self.vars.frame_limits.maximum:
+            current_frame = self.vars.frame_limits.maximum
+        #
+        if current_frame != self.tkvars.current_frame.get():
+            self.vars.trace = False
+            self.tkvars.current_frame.set(current_frame)
+            self.vars.trace = False
+        #
+        self.vars.frame_file = FRAME_PATTERN % current_frame
+        self.vars.vframe = pixelations.BaseImage(
+            pathlib.Path(self.vars.original_frames.name)
+            / self.vars.frame_file,
+            canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+        self.vars.tk_image = self.vars.vframe.tk_original
+        self.widgets.frame_canvas.create_image(
+            0, 0,
+            image=self.vars.tk_image,
+            anchor=tkinter.NW,
+            tags='vframe')
         #
 
     def trigger_indicator_redraw(self, *unused_arguments):
