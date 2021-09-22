@@ -410,6 +410,7 @@ class UserInterface:
             file_name=tkinter.StringVar(),
             show_preview=tkinter.IntVar(),
             current_frame=tkinter.IntVar(),
+            current_frame_text=tkinter.StringVar(),
             end_frame=tkinter.IntVar(),
             selection=Namespace(
                 center_x=tkinter.IntVar(),
@@ -422,6 +423,8 @@ class UserInterface:
                 color=tkinter.StringVar(),
                 drag_color=tkinter.StringVar()),
             buttonstate=Namespace(
+                previous=tkinter.StringVar(),
+                next_=tkinter.StringVar(),
                 apply=tkinter.StringVar(),
                 save=tkinter.StringVar()),
         )
@@ -444,14 +447,20 @@ class UserInterface:
         self.tkvars.current_frame.trace_add(
             'write', self.trigger_change_frame)
         #
+        self.tkvars.current_frame_text.trace_add(
+            'write', self.trigger_change_frame_from_text)
+        #
         self.widgets = Namespace(
             action_area=None,
             # buttons_area=None,
             buttons=Namespace(
-                undo=None,
+                previous=None,
+                next_=None,
                 apply=None,
                 save=None),
             frame_canvas=None,
+            frames_slider=None,
+            frame_number=None,
             canvas=None,
             height=None)
         self.do_choose_video(
@@ -459,6 +468,13 @@ class UserInterface:
             quit_on_empty_choice=True)
         self.main_window.protocol('WM_DELETE_WINDOW', self.quit)
         self.main_window.mainloop()
+
+    def action_start_frame(self):
+        """Actions before showing the start frame:
+        Set frame range from the firstto the last but 5th frame
+        """
+        self.vars.frame_limits.minimum = 1
+        self.vars.frame_limits.maximum = self.vars.nb_frames - 5
 
     def cb_indicator_drag_move(self, event):
         """Handle dragging of the indicator"""
@@ -746,7 +762,7 @@ class UserInterface:
             file_path, select_streams='v')
         progress.update_properties()
         # TODO: validate video properties,
-        # especially nb_frames and frame rates
+        # especially nb_frames, duration and frame rates
         nb_frames = int(video_properties['nb_frames'])
         if nb_frames > MAX_NB_FRAMES:
             progress.action_cancel()
@@ -804,14 +820,6 @@ class UserInterface:
             stdout='\n'.join(collected_stdout),
             stderr='\n'.join(collected_stderr))
         completed_process.check_returncode()
-
-        #
-# =============================================================================
-#         # XXX: breakpoint for now
-#         logging.warning('The development version currently ends here.')
-#         self.quit()
-#         sys.exit(0)
-# =============================================================================
         # set the original path and displayed file name
         self.vars.original_path = file_path
         self.tkvars.file_name.set(file_path.name)
@@ -1008,7 +1016,7 @@ class UserInterface:
         #
         method_display = (
             f'Action method for phase #{next_index} ({next_phase})')
-        method_name = f'action_{next_phase})'
+        method_name = f'action_{next_phase}'
         try:
             action_method = getattr(self, method_name)
         except AttributeError:
@@ -1040,9 +1048,13 @@ class UserInterface:
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
-        self.vars.frame_limits.mimimum = 1
-        self.vars.frame_limits.maximum = self.vars.nb_frames - 5
-        frames_slider = tkinter.Scale(
+        # Destroy a pre-existing widget to remove variable limits set before
+        try:
+            self.widgets.frames_slider.destroy()
+        except AttributeError:
+            pass
+        #
+        self.widgets.frames_slider = tkinter.Scale(
             image_frame,
             from_=self.vars.frame_limits.minimum,
             to=self.vars.frame_limits.maximum,
@@ -1050,7 +1062,7 @@ class UserInterface:
             label='Start frame:',
             orient=tkinter.HORIZONTAL,
             variable=self.tkvars.current_frame)
-        frames_slider.grid()
+        self.widgets.frames_slider.grid()
         self.widgets.frame_canvas = tkinter.Canvas(
             image_frame,
             width=CANVAS_WIDTH,
@@ -1065,7 +1077,6 @@ class UserInterface:
         """Show the image on a canvas and let
         the user select the area to be pixelated
         """
-        self.__show_settings_frame('Start')
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
@@ -1091,6 +1102,7 @@ class UserInterface:
         self.widgets.canvas.tag_bind(
             'image', "<B1-Motion>", self.cb_selection_drag_move)
         image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
+        self.__show_settings_frame('Start')
 
     def previous_panel(self):
         """Go to the next panel"""
@@ -1098,7 +1110,7 @@ class UserInterface:
         phase_index = PHASES.index(phase_name)
         method_display = (
             f'Rollback method for phase #{phase_index} ({phase_name})')
-        method_name = f'rollback_{phase_name})'
+        method_name = f'rollback_{phase_name}'
         try:
             rollback_method = getattr(self, method_name)
         except AttributeError:
@@ -1196,19 +1208,34 @@ class UserInterface:
         panel_method()
         self.widgets.action_area.grid(**self.grid_fullwidth)
         #
-        buttons_area = tkinter.Frame(self.widgets.action_area)
+        # Set button states depending on the panel
+        if self.vars.current_panel == PREVIEW:
+            self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
+            self.tkvars.buttonstate.next_.set(tkinter.DISABLED)
+            self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
+            self.tkvars.buttonstate.save.set(tkinter.NORMAL)
+        else:
+            if self.vars.current_panel == START_FRAME:
+                self.tkvars.buttonstate.previous.set(tkinter.DISABLED)
+            else:
+                self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
+            #
+            self.tkvars.buttonstate.next_.set(tkinter.NORMAL)
+            self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
+            self.tkvars.buttonstate.save.set(tkinter.DISABLED)
         #
+        buttons_area = tkinter.Frame(self.widgets.action_area)
         buttons_grid = dict(padx=5, pady=5, sticky=tkinter.E)
-        self.widgets.buttons.undo = tkinter.Button(
+        self.widgets.buttons.previous = tkinter.Button(
             buttons_area,
-            text='\u238c Undo',
-            command=self.do_undo)
-        self.widgets.buttons.undo.grid(row=0, column=0, **buttons_grid)
-        self.widgets.buttons.apply = tkinter.Button(
+            text='\u25c1 Previous',
+            command=self.previous_panel)
+        self.widgets.buttons.previous.grid(row=0, column=0, **buttons_grid)
+        self.widgets.buttons.next_ = tkinter.Button(
             buttons_area,
-            text='\u2713 Apply',
-            command=self.do_apply_changes)
-        self.widgets.buttons.apply.grid(row=0, column=1, **buttons_grid)
+            text='\u25b7 Next',
+            command=self.next_panel)
+        self.widgets.buttons.next_.grid(row=0, column=1, **buttons_grid)
         try:
             self.widgets.buttons.save = tkinter.Button(
                 buttons_area,
@@ -1221,12 +1248,17 @@ class UserInterface:
                 command=self.do_save_file)
         #
         self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
+        self.widgets.buttons.apply = tkinter.Button(
+            buttons_area,
+            text='\u21ba Apply',
+            command=self.do_apply_changes)
+        self.widgets.buttons.apply.grid(row=1, column=0, **buttons_grid)
         self.trigger_button_states()
         about_button = tkinter.Button(
             buttons_area,
             text='\u24d8 About',
             command=self.show_about)
-        about_button.grid(row=1, column=0, **buttons_grid)
+        about_button.grid(row=1, column=1, **buttons_grid)
         quit_button = tkinter.Button(
             buttons_area,
             text='\u23fb Quit',
@@ -1379,21 +1411,27 @@ class UserInterface:
         label = tkinter.Label(
             parent_frame,
             text='Number:')
+        # Destroy a pre-existing widget to remove variable limits set before
+        try:
+            self.widgets.frame_number.destroy()
+        except AttributeError:
+            pass
+        #
         if change_enabled:
-            frame_number = tkinter.Spinbox(
+            self.widgets.frame_number = tkinter.Spinbox(
                 parent_frame,
                 from_=self.vars.frame_limits.minimum,
                 to=self.vars.frame_limits.maximum,
-                textvariable=self.tkvars.current_frame,
+                textvariable=self.tkvars.current_frame_text,
                 state='readonly',
                 width=4)
         else:
-            frame_number = tkinter.Label(
+            self.widgets.frame_number = tkinter.Label(
                 parent_frame,
                 textvariable=self.tkvars.current_frame)
         #
         label.grid(sticky=tkinter.W)
-        frame_number.grid(
+        self.widgets.frame_number.grid(
             sticky=tkinter.W, columnspan=3,
             column=1, row=label.grid_info()['row'])
         if self.vars.vframe.display_ratio > 1:
@@ -1462,16 +1500,8 @@ class UserInterface:
 
     def trigger_button_states(self, *unused_arguments):
         """Trigger undo, apply and save button states changes"""
-        if self.vars.undo_buffer:
-            desired_undo_state = tkinter.NORMAL
-        else:
-            desired_undo_state = tkinter.DISABLED
-        #
-        self.__do_update_button('undo', desired_undo_state)
-        for button_name in ('apply', 'save'):
-            self.__do_update_button(
-                button_name,
-                self.tkvars.buttonstate[button_name].get())
+        for (button_name, state_var) in self.tkvars.buttonstate.items():
+            self.__do_update_button(button_name, state_var.get())
         #
 
     def trigger_change_frame(self, *unused_arguments):
@@ -1485,16 +1515,22 @@ class UserInterface:
             logging.warning('%s', error)
         #
         current_frame = self.tkvars.current_frame.get()
+        # logging.debug('Current frame# is %r', current_frame)
         if current_frame < self.vars.frame_limits.minimum:
             current_frame = self.vars.frame_limits.minimum
+            logging.warning(
+                'Raising current frame to minimum (%r)', current_frame)
         elif current_frame > self.vars.frame_limits.maximum:
             current_frame = self.vars.frame_limits.maximum
+            logging.warning(
+                'Lowering current frame to maximum (%r)', current_frame)
         #
+        self.vars.trace = False
+        self.tkvars.current_frame_text.set(str(current_frame))
         if current_frame != self.tkvars.current_frame.get():
-            self.vars.trace = False
             self.tkvars.current_frame.set(current_frame)
-            self.vars.trace = False
         #
+        self.vars.trace = True
         self.vars.frame_file = FRAME_PATTERN % current_frame
         self.vars.vframe = pixelations.BaseImage(
             pathlib.Path(self.vars.original_frames.name)
@@ -1506,6 +1542,15 @@ class UserInterface:
             image=self.vars.tk_image,
             anchor=tkinter.NW,
             tags='vframe')
+        #
+
+    def trigger_change_frame_from_text(self, *unused_arguments):
+        """Trigger a change of the frame"""
+        if not self.vars.trace:
+            return
+        #
+        self.tkvars.current_frame.set(
+            int(self.tkvars.current_frame_text.get()))
         #
 
     def trigger_indicator_redraw(self, *unused_arguments):

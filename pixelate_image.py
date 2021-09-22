@@ -816,7 +816,7 @@ class UserInterface:
         #
         method_display = (
             f'Action method for phase #{next_index} ({next_phase})')
-        method_name = f'action_{next_phase})'
+        method_name = f'action_{next_phase}'
         try:
             action_method = getattr(self, method_name)
         except AttributeError:
@@ -878,7 +878,7 @@ class UserInterface:
         phase_index = PHASES.index(phase_name)
         method_display = (
             f'Rollback method for phase #{phase_index} ({phase_name})')
-        method_name = f'rollback_{phase_name})'
+        method_name = f'rollback_{phase_name}'
         try:
             rollback_method = getattr(self, method_name)
         except AttributeError:
