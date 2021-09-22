@@ -124,7 +124,7 @@ TILESIZE_INCREMENT = 5
 MINIMUM_SELECTION_SIZE = 20
 INITIAL_SELECTION_SIZE = 50
 
-INDICATOR_OUTLINE_WIDTH = 9
+INDICATOR_OUTLINE_WIDTH = 5
 
 POSSIBLE_INDICATOR_COLORS = (
     'white', 'black', 'red', 'green', 'blue', 'cyan', 'yellow', 'magenta')
@@ -367,7 +367,7 @@ class UserInterface:
             buttonstate=Namespace(
                 previous=tkinter.StringVar(),
                 next_=tkinter.StringVar(),
-                apply=tkinter.StringVar(),
+                more=tkinter.StringVar(),
                 save=tkinter.StringVar()),
         )
         # Trace changes:
@@ -398,7 +398,7 @@ class UserInterface:
             buttons=Namespace(
                 previous=None,
                 next_=None,
-                apply=None,
+                more=None,
                 save=None),
             frame_canvas=None,
             frames_slider=None,
@@ -412,11 +412,91 @@ class UserInterface:
         self.main_window.mainloop()
 
     def action_start_frame(self):
-        """Actions before showing the start frame:
-        Set frame range from the firstto the last but 5th frame
+        """Actions before showing the start frame selection panel:
+        Set frame range from the first to the last but 5th frame.
         """
         self.vars.frame_limits.minimum = 1
         self.vars.frame_limits.maximum = self.vars.nb_frames - 5
+
+    def action_start_area(self):
+        """Actions before showing the start area selection panel:
+        Fix the selected frame as start frame.
+        Load the frame and set the variables
+        """
+        self.vars.start_at.frame = self.tkvars.current_frame.get()
+        # self.vars.frame_file = FRAME_PATTERN % self.vars.start_at.frame
+        self.vars.image = pixelations.FramePixelation(
+            pathlib.Path(self.vars.original_frames.name)
+            / self.vars.frame_file,
+            canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+        (im_width, im_height) = self.vars.image.original.size
+        sel_width = self.tkvars.selection.width.get()
+        if not sel_width:
+            # Set initial selection width to 20% of image width
+            sel_width = max(
+                INITIAL_SELECTION_SIZE,
+                round(im_width / 5))
+        #
+        sel_height = self.tkvars.selection.height.get()
+        if not sel_height:
+            sel_height = sel_width
+        #
+        center_x = self.tkvars.selection.center_x.get() or im_width // 2
+        center_y = self.tkvars.selection.center_y.get() or im_height // 2
+        self.__do_update_selection(
+            center_x=center_x,
+            center_y=center_y,
+            width=min(sel_width, im_width),
+            height=min(sel_height, im_height))
+        # set the shape
+        if not self.tkvars.selection.shape.get():
+            self.tkvars.selection.shape.set(OVAL)
+        #
+        # set tilesize
+        if not self.tkvars.selection.tilesize.get():
+            self.tkvars.selection.tilesize.set(
+                pixelations.DEFAULT_TILESIZE)
+        #
+        # set the show_preview variable by default
+        self.tkvars.show_preview.set(1)
+
+    def action_end_frame(self):
+        """Actions before showing the start frame selection panel:
+        Set frame range from the selected start frame
+        to the last frame.
+        Fix the selected start coordinates
+        """
+        self.vars.frame_limits.minimum = self.vars.start_at.frame + 1
+        self.vars.frame_limits.maximum = self.vars.nb_frames
+        for item in self.vars.start_at:
+            try:
+                source = self.tkvars.selection[item]
+            except KeyError:
+                continue
+            #
+            value = source.get()
+            logging.debug('Setting start_at value for %r to %r', item, value)
+            self.vars.start_at[item] = value
+        #
+
+    def action_end_area(self):
+        """Actions before showing the start area selection panel:
+        Fix the selected frame as end frame.
+        TODO: load the image
+        """
+        self.vars.end_at.frame = self.tkvars.current_frame.get()
+        # self.vars.frame_file = FRAME_PATTERN % self.vars.end_at.frame
+        self.vars.image = pixelations.ImagePixelation(
+            pathlib.Path(self.vars.original_frames.name)
+            / self.vars.frame_file,
+            canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+
+    def action_preview(self):
+        """Actions before showing the start frame selection panel:
+        TODO: Fix the selected start coordinates
+        TODO: apply the pixelations to all images
+        """
+        ...
 
     def cb_indicator_drag_move(self, event):
         """Handle dragging of the indicator"""
@@ -537,26 +617,18 @@ class UserInterface:
         # Trigger the selection change explicitly
         self.trigger_selection_change()
 
-    def do_apply_changes(self):
-        """Apply changes to the image"""
-        # Append the current state to the undo buffer
-        self.vars.undo_buffer.append(
-            (self.vars.image.original,
-             FrozenSelection(self.tkvars.selection),
-             self.vars.unapplied_changes))
-        if len(self.vars.undo_buffer) > UNDO_SIZE:
-            del self.vars.undo_buffer[:-UNDO_SIZE]
+    def do_apply_and_recycle(self):
+        """Apply changes to the frames,
+        and re-cycle them as original frames
+        """
+        # TODO: fill up "modified" directory with missing frames
+        # self.complete_modified_directory()
         #
-        # Visual feedback
-        self.__do_draw_indicator(stipple='gray75')
-        self.main_window.update_idletasks()
-        time.sleep(.2)
-        self.__do_draw_indicator()
-        self.vars.image.set_original(self.vars.image.result)
-        self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
-        self.tkvars.buttonstate.save.set(tkinter.NORMAL)
-        self.trigger_preview_toggle()
-        self.vars.unapplied_changes = False
+        self.vars.original_frames.cleanup()
+        self.vars.original_frames = self.vars.modified_frames
+        self.vars.modified_frames = None
+        self.current_phase = CHOOSE_VIDEO
+        self.next_panel()
 
     def do_choose_video(self,
                         keep_existing=False,
@@ -628,8 +700,6 @@ class UserInterface:
             break
         #
         self.vars.undo_buffer.clear()
-        self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
-        self.tkvars.buttonstate.save.set(tkinter.DISABLED)
         self.next_panel()
 
     def __do_draw_indicator(self, stipple=None):
@@ -823,8 +893,6 @@ class UserInterface:
         self.vars.original_path = pathlib.Path(selected_file)
         self.tkvars.file_name.set(self.vars.original_path.name)
         self.vars.undo_buffer.clear()
-        self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
-        self.tkvars.buttonstate.save.set(tkinter.DISABLED)
         self.vars.unapplied_changes = False
         return True
 
@@ -861,29 +929,6 @@ class UserInterface:
                 state='readonly',
                 textvariable=self.tkvars.selection.height)
         #
-
-    def do_undo(self):
-        """Revert to the state before doing the last apply"""
-        try:
-            last_state = self.vars.undo_buffer.pop()
-        except IndexError:
-            return
-        #
-        if not self.vars.undo_buffer:
-            self.__do_update_button('undo', tkinter.DISABLED)
-        #
-        (previous_image, previous_selection, unapplied_changes) = last_state
-        self.vars.image.set_original(previous_image)
-        self.vars.trace = False
-        previous_selection.restore_to(self.tkvars.selection)
-        self.vars.trace = True
-        self.__do_pixelate()
-        self.__do_draw_indicator(stipple='error')
-        self.main_window.update_idletasks()
-        time.sleep(.2)
-        self.__do_draw_indicator()
-        self.vars.unapplied_changes = unapplied_changes
-        self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
 
     def __do_update_button(self, button_name, new_state):
         """Update a button state if required"""
@@ -926,37 +971,41 @@ class UserInterface:
 
     def __get_save_recommendation(self, ask_to_apply=False):
         """Return True or False (depending on the necessity to
-        save the image)
+        save the video)
         """
-        try:
-            last_applied_selection = self.vars.undo_buffer[-1][1]
-        except IndexError:
-            logging.debug('No last applied selection!')
-        else:
-            current_selection = FrozenSelection(self.tkvars.selection)
-            logging.debug('Last applied selection: %s', last_applied_selection)
-            logging.debug('Current selection:      %s', current_selection)
-            logging.debug(
-                'Selections are equal: %r',
-                current_selection == last_applied_selection)
-        #
-        if self.vars.unapplied_changes:
-            if not ask_to_apply:
-                return True
-            #
-            if self.tkvars.show_preview.get():
-                default_answer = messagebox.YES
-            else:
-                default_answer = messagebox.NO
-            #
-            if messagebox.askyesno(
-                    'Not yet applied changes',
-                    'Pixelate the current selection before saving?',
-                    default=default_answer):
-                self.do_apply_changes()
-            #
-        #
-        return bool(self.vars.undo_buffer)
+        # TODO
+        return False
+# =============================================================================
+#         try:
+#             last_applied_selection = self.vars.undo_buffer[-1][1]
+#         except IndexError:
+#             logging.debug('No last applied selection!')
+#         else:
+#             current_selection = FrozenSelection(self.tkvars.selection)
+#             logging.debug('Last applied selection: %s', last_applied_selection)
+#             logging.debug('Current selection:      %s', current_selection)
+#             logging.debug(
+#                 'Selections are equal: %r',
+#                 current_selection == last_applied_selection)
+#         #
+#         if self.vars.unapplied_changes:
+#             if not ask_to_apply:
+#                 return True
+#             #
+#             if self.tkvars.show_preview.get():
+#                 default_answer = messagebox.YES
+#             else:
+#                 default_answer = messagebox.NO
+#             #
+#             if messagebox.askyesno(
+#                     'Not yet applied changes',
+#                     'Pixelate the current selection before saving?',
+#                     default=default_answer):
+#                 self.do_apply_changes()
+#             #
+#         #
+#         return bool(self.vars.undo_buffer)
+# =============================================================================
 
     def __next_action(self):
         """Execute the next action"""
@@ -997,37 +1046,11 @@ class UserInterface:
 
     def panel_start_frame(self):
         """Select the start frame using a slider
-        abd show that frame on a canvas
+        and show that frame on a canvas
         """
-        image_frame = tkinter.Frame(
-            self.widgets.action_area,
-            **self.with_border)
-        # Destroy a pre-existing widget to remove variable limits set before
-        try:
-            self.widgets.frames_slider.destroy()
-        except AttributeError:
-            pass
-        #
-        self.widgets.frames_slider = tkinter.Scale(
-            image_frame,
-            from_=self.vars.frame_limits.minimum,
-            to=self.vars.frame_limits.maximum,
-            length=CANVAS_WIDTH,
-            label='Start frame:',
-            orient=tkinter.HORIZONTAL,
-            variable=self.tkvars.current_frame)
-        self.widgets.frames_slider.grid()
-        self.widgets.frame_canvas = tkinter.Canvas(
-            image_frame,
-            width=CANVAS_WIDTH,
-            height=CANVAS_HEIGHT)
-        self.widgets.frame_canvas.grid()
-        self.vars.trace = True
-        self.trigger_change_frame()
-        image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
-        self.__show_frameselection_frame('Start')
+        self.__show_frameselection_panel('Start')
 
-    def panel_select_area(self):
+    def panel_start_area(self):
         """Show the image on a canvas and let
         the user select the area to be pixelated
         """
@@ -1057,6 +1080,51 @@ class UserInterface:
             'image', "<B1-Motion>", self.cb_selection_drag_move)
         image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
         self.__show_settings_frame('Start')
+
+    def panel_end_frame(self):
+        """Select the end frame using a slider
+        and show that frame on a canvas
+        """
+        self.__show_frameselection_panel('End')
+
+    def panel_end_area(self):
+        """Show the image on a canvas and let
+        the user select the area to be pixelated
+        """
+        image_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        self.widgets.canvas = tkinter.Canvas(
+            image_frame,
+            width=CANVAS_WIDTH,
+            height=CANVAS_HEIGHT)
+        self.vars.tk_image = self.vars.image.tk_original
+        self.widgets.canvas.create_image(
+            0, 0,
+            image=self.vars.tk_image,
+            anchor=tkinter.NW,
+            tags='image')
+        self.widgets.canvas.grid()
+        self.__do_draw_indicator()
+        self.__do_pixelate()
+        self.vars.trace = True
+        # add bindings to create a new selector
+        self.widgets.canvas.tag_bind(
+            'image', "<ButtonPress-1>", self.cb_selection_drag_start)
+        self.widgets.canvas.tag_bind(
+            'image', "<ButtonRelease-1>", self.cb_selection_drag_stop)
+        self.widgets.canvas.tag_bind(
+            'image', "<B1-Motion>", self.cb_selection_drag_move)
+        image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
+        if self.vars.start_at.shape in ELLIPTIC_SHAPES:
+            allowed_shapes = ELLIPTIC_SHAPES
+        else:
+            allowed_shapes = RECTANGULAR_SHAPES
+        #
+        self.__show_settings_frame(
+            'End',
+            fixed_tilesize=True,
+            allowed_shapes=allowed_shapes)
 
     def previous_panel(self):
         """Go to the next panel"""
@@ -1106,6 +1174,17 @@ class UserInterface:
             #
         #
         self.main_window.destroy()
+
+    def rollback_start_area(self):
+        """Actions when clicking th "previous" button
+        in the start area selection panel:
+        Set frame range from the first to the last but 5th frame.
+        Reset the current frame to the saved start frame
+        """
+        self.vars.frame_limits.minimum = 1
+        self.vars.frame_limits.maximum = self.vars.nb_frames - 5
+        self.tkvars.current_frame.set(self.vars.start_at.frame)
+
 
     def show_about(self):
         """Show information about the application
@@ -1166,7 +1245,7 @@ class UserInterface:
         if self.vars.current_panel == PREVIEW:
             self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
             self.tkvars.buttonstate.next_.set(tkinter.DISABLED)
-            self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
+            self.tkvars.buttonstate.more.set(tkinter.NORMAL)
             self.tkvars.buttonstate.save.set(tkinter.NORMAL)
         else:
             if self.vars.current_panel == START_FRAME:
@@ -1175,7 +1254,7 @@ class UserInterface:
                 self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
             #
             self.tkvars.buttonstate.next_.set(tkinter.NORMAL)
-            self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
+            self.tkvars.buttonstate.more.set(tkinter.DISABLED)
             self.tkvars.buttonstate.save.set(tkinter.DISABLED)
         #
         buttons_area = tkinter.Frame(self.widgets.action_area)
@@ -1202,11 +1281,11 @@ class UserInterface:
                 command=self.do_save_file)
         #
         self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
-        self.widgets.buttons.apply = tkinter.Button(
+        self.widgets.buttons.more = tkinter.Button(
             buttons_area,
-            text='\u21ba Apply',
-            command=self.do_apply_changes)
-        self.widgets.buttons.apply.grid(row=1, column=0, **buttons_grid)
+            text='\u2795 More…',
+            command=self.do_apply_and_recycle)
+        self.widgets.buttons.more.grid(row=1, column=0, **buttons_grid)
         self.trigger_button_states()
         about_button = tkinter.Button(
             buttons_area,
@@ -1397,15 +1476,49 @@ class UserInterface:
         label = tkinter.Label(parent_frame, text=scale_factor)
         label.grid(sticky=tkinter.W, columnspan=4)
 
-    def __show_frameselection_frame(self, frame_position):
+    def __show_frameselection_sidebar(self, frame_position):
         """Show the settings frame"""
         frameselection_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
         self.__show_frameinfo(
-            frameselection_frame, frame_position, change_enabled=True)
+            frameselection_frame,
+            frame_position,
+            change_enabled=True)
         frameselection_frame.columnconfigure(4, weight=100)
         frameselection_frame.grid(row=0, column=1, **self.grid_fullwidth)
+
+    def __show_frameselection_panel(self, position):
+        """Select the start or end frame using a slider
+        abd show that frame on a canvas
+        """
+        image_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        # Destroy a pre-existing widget to remove variable limits set before
+        try:
+            self.widgets.frames_slider.destroy()
+        except AttributeError:
+            pass
+        #
+        self.widgets.frames_slider = tkinter.Scale(
+            image_frame,
+            from_=self.vars.frame_limits.minimum,
+            to=self.vars.frame_limits.maximum,
+            length=CANVAS_WIDTH,
+            label='{position} frame:',
+            orient=tkinter.HORIZONTAL,
+            variable=self.tkvars.current_frame)
+        self.widgets.frames_slider.grid()
+        self.widgets.frame_canvas = tkinter.Canvas(
+            image_frame,
+            width=CANVAS_WIDTH,
+            height=CANVAS_HEIGHT)
+        self.widgets.frame_canvas.grid()
+        self.vars.trace = True
+        self.trigger_change_frame()
+        image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
+        self.__show_frameselection_sidebar(position)
 
     def __show_settings_frame(self,
                               frame_position,
@@ -1527,8 +1640,6 @@ class UserInterface:
         """Trigger update after selection changed"""
         if self.vars.trace:
             self.vars.unapplied_changes = True
-            self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
-            self.tkvars.buttonstate.save.set(tkinter.NORMAL)
             self.__do_pixelate()
             self.__do_draw_indicator()
         #

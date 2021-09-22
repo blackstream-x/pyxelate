@@ -481,25 +481,37 @@ class FramePixelation(BasePixelation):
     The pixelation is only as big as required
     """
 
+    @property
+    def mask(self):
+        """The mask for the pixelated area"""
+        return self.lazy_evaluation(
+            self.kw_px_mask,
+            self.get_mask,
+            clear_on_miss=self.kw_px_area)
+
     def get_mask(self):
         """Return the mask for the pixelated image"""
         return self.mask_shape
 
     def get_pixelated_area(self):
-        """Return a copy of the original image,
-        fully pixelated
+        """Return a pixelated area of the original image
         """
         (offset_x, offset_y) = self.shape_offset
         box = (offset_x,
                offset_y,
                offset_x + self.mask_shape.width,
                offset_y + self.mask_shape.height)
+        logging.debug('Pixelation box: %r', box)
+        logging.debug('Pixelation width: %r', self.mask_shape.width)
+        logging.debug('Pixelation height: %r', self.mask_shape.height)
         return pixelated(self.original.crop(box), tilesize=self.tilesize)
 
     def get_result(self):
         """Return the result
         """
         result_image = self.original.copy()
+        logging.debug('Pixelated size: %r', self.pixelated_area.size)
+        logging.debug('Mask size: %r', self.mask.size)
         result_image.paste(
             self.pixelated_area, box=self.shape_offset, mask=self.mask)
         return result_image
