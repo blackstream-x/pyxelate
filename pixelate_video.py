@@ -266,19 +266,18 @@ class GenericProgress(gui_commons.TransientWindow):
                  maximum=None,
                  title=None):
         """Create the toplevel window"""
-        self.label = label
         self.maximum = maximum
-        super().__init__(parent, title=title)
+        super().__init__(parent, content=label, title=title)
 
-    def create_content(self):
+    def create_content(self, content):
         """Create a progressbar"""
         self.widgets['current_value'] = tkinter.IntVar()
         label = tkinter.Label(
             self.body,
-            text=self.label)
+            text=content)
         progressbar = ttk.Progressbar(
             self.body,
-            length=CANVAS_WIDTH,
+            length=300,
             variable=self.widgets['current_value'],
             maximum=self.maximum,
             orient=tkinter.HORIZONTAL)
@@ -290,63 +289,6 @@ class GenericProgress(gui_commons.TransientWindow):
         """Set the current value"""
         self.widgets['current_value'].set(current_value)
         self.widgets['progress'].update()
-        self.update_idletasks()
-
-
-class LoadProgress(gui_commons.TransientWindow):
-
-    """Load progress in a transient modal window"""
-
-    def create_content(self):
-        """Create progressbars
-        1. indeterminate bouncing while determining image properies
-        2. determinate for tracking the movie being split into frames
-        """
-        label = tkinter.Label(
-            self.body,
-            text='Determining video properties…')
-        progressbar = ttk.Progressbar(
-            self.body,
-            length=CANVAS_WIDTH,
-            mode='indeterminate',
-            orient=tkinter.HORIZONTAL)
-        label.grid(sticky=tkinter.W)
-        progressbar.grid()
-        self.widgets['properties_progress'] = progressbar
-        self.widgets['current_frame'] = tkinter.IntVar()
-        label = tkinter.Label(
-            self.body,
-            text='Splitting video into frames…')
-        progressbar = ttk.Progressbar(
-            self.body,
-            length=CANVAS_WIDTH,
-            variable=self.widgets['current_frame'],
-            orient=tkinter.HORIZONTAL)
-        label.grid(sticky=tkinter.W)
-        progressbar.grid()
-        self.widgets['split_progress'] = progressbar
-
-    def start_properties(self):
-        """Start the properties progressbar"""
-        self.widgets['properties_progress'].start()
-        self.update_idletasks()
-
-    def start_split(self, nb_frames):
-        """Stop the properties progressbar
-        and set the maximum of the split progressbar
-        """
-        self.widgets['properties_progress'].stop()
-        self.widgets['split_progress'].config(maximum=nb_frames)
-        self.update_idletasks()
-
-    def update_properties(self):
-        """Start the properties progressbar"""
-        self.widgets['properties_progress'].update()
-
-    def set_current_frame(self, current_frame_number):
-        """Set the current frame number"""
-        self.widgets['current_frame'].set(current_frame_number)
-        self.widgets['split_progress'].update()
         self.update_idletasks()
 
 
@@ -746,21 +688,29 @@ class UserInterface:
         showing a progress bar (in an auto-closing modal window?)
         """
         # Get audio and video stream information
-        progress = LoadProgress(
+        progress = gui_commons.TransientWindow(
             self.main_window,
-            title=f'Loading {file_path.name} …')
-        progress.start_properties()
+            title=f'Loading {file_path.name} (step 1)')
+        label = tkinter.Label(
+            progress.body,
+            text='Examining audio stream …')
+        label.grid()
+        progress.update_idletasks()
         logging.debug('Examining audio stream …')
         has_audio = bool(
             ffmw.get_stream_info(file_path,
                                  select_streams='a',
                                  show_entries=ffmw.ENTRIES_ALL))
-        progress.update_properties()
         logging.info('%r has audio: %r', file_path.name, has_audio)
+        label = tkinter.Label(
+            progress.body,
+            text='Examining video stream …')
+        label.grid()
+        progress.update_idletasks()
         logging.debug('Examining video stream …')
         video_properties = ffmw.get_stream_info(
             file_path, select_streams='v')
-        progress.update_properties()
+        progress.action_cancel()
         # TODO: validate video properties,
         # especially nb_frames, duration and frame rates
         nb_frames = int(video_properties['nb_frames'])
@@ -768,7 +718,11 @@ class UserInterface:
             progress.action_cancel()
             raise ValueError(f'To many frames (maximum is {MAX_NB_FRAMES})!')
         #
-        progress.start_split(nb_frames)
+        progress = GenericProgress(
+            self.main_window,
+            title='Loading video',
+            label=f'Splitting {file_path.name} into frames …',
+            maximum=nb_frames)
         # Create temorary directory for original frames
         self.vars.nb_frames = nb_frames
         self.vars.original_frames = tempfile.TemporaryDirectory()
@@ -804,7 +758,7 @@ class UserInterface:
                 collected_stdout.append(line)
                 if line.startswith('frame='):
                     value = line.split('=', 1)[1]
-                    progress.set_current_frame(int(value))
+                    progress.set_current_value(int(value))
                 #
             time.sleep(.1)
         # Cleanup:
