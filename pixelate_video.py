@@ -533,16 +533,8 @@ class UserInterface:
         if self.vars.end_at.frame:
             self.__do_adjust_current_frame(self.vars.end_at.frame)
         #
-        for item in self.vars.start_at:
-            try:
-                source = self.tkvars.selection[item]
-            except KeyError:
-                continue
-            #
-            value = source.get()
-            logging.debug('Setting start_at value for %r to %r', item, value)
-            self.vars.start_at[item] = value
-        #
+        logging.debug('Fix start coordinates:')
+        self.__do_store_selection(self.vars.start_at)
 
     def action_end_area(self):
         """Actions before showing the end area selection panel:
@@ -563,15 +555,8 @@ class UserInterface:
         Fix the selected end coordinates
         Apply the pixelations to all images
         """
-        for item in self.vars.end_at:
-            try:
-                source = self.tkvars.selection[item]
-            except KeyError:
-                continue
-            #
-            value = source.get()
-            logging.debug('Setting end_at value for %r to %r', item, value)
-            self.vars.end_at[item] = value
+        logging.debug('Fix end coordinates:')
+        self.__do_store_selection(self.vars.end_at)
         #
         # Save pixelation start frame
         self.vars.opxsf.append(self.vars.start_at.frame)
@@ -729,6 +714,7 @@ class UserInterface:
     def __do_adjust_current_frame(self, new_current_frame):
         """Adjust current frame without calling triggers"""
         previous_trace_setting = self.vars.trace
+        self.vars.trace=False
         logging.debug(
             'Setting current frame# to %r', new_current_frame)
         self.tkvars.current_frame.set(new_current_frame)
@@ -740,7 +726,6 @@ class UserInterface:
         connections of the current_frame and current_frame_text
         control variables to their its widgets
         """
-        # TODO
         # Destroy pre-existing widgets to remove variable limits set before
         for widget in (self.widgets.frame_number, self.widgets.frames_slider):
             try:
@@ -752,10 +737,36 @@ class UserInterface:
         self.vars.frame_limits.minimum = minimum or 1
         self.vars.frame_limits.maximum = maximum or self.vars.nb_frames
 
+    def __do_clear_selection(self, storage_vars):
+        """Clear selection in storage_vars"""
+        for item in storage_vars:
+            try:
+                self.tkvars.selection[item]
+            except KeyError:
+                continue
+            #
+            value = storage_vars[item]
+            logging.debug('Clearing selection item %r (was %r)', item, value)
+            storage_vars[item] = None
+        #
+
+    def __do_store_selection(self, storage_vars):
+        """Store selection in storage_vars"""
+        for item in storage_vars:
+            try:
+                source = self.tkvars.selection[item]
+            except KeyError:
+                continue
+            #
+            value = source.get()
+            logging.debug('Storing selection item %r: %r', item, value)
+            storage_vars[item] = value
+        #
+
     def __do_adjust_selection(self, new_selection_vars):
         """Adjust selection without calling triggers"""
         previous_trace_setting = self.vars.trace
-        # TODO
+        self.vars.trace=False
         for (item, value) in new_selection_vars.items():
             try:
                 target = self.tkvars.selection[item]
@@ -783,6 +794,9 @@ class UserInterface:
         self.vars.original_frames = self.vars.modified_frames
         self.vars.modified_frames = None
         self.vars.trace=False
+        # Clear end selection
+        self.__do_clear_selection(self.vars.end_at)
+        #
         self.vars.current_panel = CHOOSE_VIDEO
         self.next_panel()
 
@@ -1299,6 +1313,8 @@ class UserInterface:
         self.vars.trace = True
         self.trigger_change_frame()
         image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
+        # TODO: add play, stop, forward and backward buttons,
+        # and the matching handlers
         sidebar_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
