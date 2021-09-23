@@ -43,6 +43,11 @@ from PIL import features
 DEFAULT_TILESIZE = 25
 DEFAULT_CANVAS_SIZE = (720, 405)
 
+ELLIPSE = 'ellipse'
+RECTANGLE = 'rectangle'
+
+FRAME_PATTERN = 'frame%04d.jpg'
+
 
 #
 # Helper functions
@@ -216,9 +221,9 @@ class ShapesCache(Borg):
         #
         shape_image = Image.new('L', size, color=0)
         draw = ImageDraw.Draw(shape_image)
-        if 'rectangle'.startswith(shape_type):
+        if RECTANGLE.startswith(shape_type):
             draw_method = draw.rectangle
-        elif 'ellipse'.startswith(shape_type):
+        elif ELLIPSE.startswith(shape_type):
             draw_method = draw.ellipse
         else:
             raise ValueError('Unsupported shape %r!' % shape_type)
@@ -256,7 +261,7 @@ class BaseImage:
         """Allocate the internal cache"""
 
         self.__cache = {}
-        self.__canvas_size = (0, 0)
+        self.__canvas_size = None
         self.set_canvas_size(canvas_size)
         self.load_image(image_path)
         #
@@ -299,6 +304,9 @@ class BaseImage:
     @property
     def display_ratio(self):
         """The display ratio"""
+        if self.__canvas_size is None:
+            return 1
+        #
         return self.lazy_evaluation(
             self.kw_display_ratio, self.get_display_ratio)
 
@@ -498,20 +506,90 @@ class FramePixelation(BasePixelation):
                offset_y,
                offset_x + self.mask_shape.width,
                offset_y + self.mask_shape.height)
-        #logging.debug('Pixelation box: %r', box)
-        #logging.debug('Pixelation width: %r', self.mask_shape.width)
-        #logging.debug('Pixelation height: %r', self.mask_shape.height)
+        # logging.debug('Pixelation box: %r', box)
+        # logging.debug('Pixelation width: %r', self.mask_shape.width)
+        # logging.debug('Pixelation height: %r', self.mask_shape.height)
         return pixelated(self.original.crop(box), tilesize=self.tilesize)
 
     def get_result(self):
         """Return the result
         """
         result_image = self.original.copy()
-        #logging.debug('Pixelated size: %r', self.pixelated_area.size)
-        #logging.debug('Mask size: %r', self.mask.size)
+        # logging.debug('Pixelated size: %r', self.pixelated_area.size)
+        # logging.debug('Mask size: %r', self.mask.size)
         result_image.paste(
             self.pixelated_area, box=self.shape_offset, mask=self.mask)
         return result_image
+
+
+class MultiFramePixelation:
+
+    """Pixelate a frames sequence"""
+
+    def __init__(self,
+                 source_path,
+                 target_path,
+                 file_name_pattern=FRAME_PATTERN):
+        """Check if both directories exist"""
+        for current_path in (source_path, target_path):
+            if not current_path.is_dir():
+                raise ValueError('%s is not a directory!')
+            #
+        #
+        # pylint: disable=pointless-statement ; Test for valid pattern
+        file_name_pattern % 1
+        # pylint: enable
+        self.source_path = source_path
+        self.target_path = target_path
+        self.pattern = file_name_pattern
+        self.start = dict()
+        # self.end = dict()
+        self.gradients = dict()
+
+    def get_intermediate_value(self, item, offset):
+        """Get the intermediate value
+        at frame# start.frame + offset
+        """
+        return self.start[item] + round(self.gradients[item] * offset)
+
+    def pixelate_frames(self, tilesize, shape, start, end):
+        """Pixelate the frames and yield a progress fraction
+        start and end must be Namespaces or dicts
+        containing frame, center_x, center_y, width and height
+        """
+        start_frame = start['frame']
+        end_frame = end['frame']
+        frames_diff = end_frame - start_frame
+        if frames_diff < 1:
+            raise ValueError(
+                'The end frame must be after the start frame!')
+        #
+        self.start = start
+        self.gradients = dict()
+        for item in ('center_x', 'center_y', 'width', 'height'):
+            self.gradients[item] = Fraction(
+                end[item] - start[item], frames_diff)
+        #
+        for current_frame in range(start_frame, end_frame + 1):
+            file_name = self.pattern % current_frame
+            source_frame = FramePixelation(
+                self.source_path / file_name,
+                canvas_size=None,
+                tilesize=tilesize)
+            offset = current_frame - start_frame
+            source_frame.set_shape(
+                (
+                    self.get_intermediate_value('center_x', offset),
+                    self.get_intermediate_value('center_y', offset)),
+                shape,
+                (
+                    self.get_intermediate_value('width', offset),
+                    self.get_intermediate_value('height', offset)))
+            source_frame.result.save(self.target_path / file_name)
+            logging.debug('Saved pixelated frame# %r', current_frame)
+            yield round(Fraction(100 * (offset + 1), (frames_diff + 1)))
+        #
+
 
 
 # vim: fileencoding=utf-8 ts=4 sts=4 sw=4 autoindent expandtab syntax=python:

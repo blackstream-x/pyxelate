@@ -97,19 +97,16 @@ PANEL_NAMES = {
 CANVAS_WIDTH = 720
 CANVAS_HEIGHT = 576
 
-ELLIPSE = 'ellipse'
-RECTANGLE = 'rectangle'
-
 OVAL = '\u2b2d ellipse'
 CIRCLE = '\u25cb circle'
 RECT = '\u25ad rectangle'
 SQUARE = '\u25a1 square'
 
 SHAPES = {
-    OVAL: ELLIPSE,
-    CIRCLE: ELLIPSE,
-    RECT: RECTANGLE,
-    SQUARE: RECTANGLE,
+    OVAL: pixelations.ELLIPSE,
+    CIRCLE: pixelations.ELLIPSE,
+    RECT: pixelations.RECTANGLE,
+    SQUARE: pixelations.RECTANGLE,
 }
 
 ELLIPTIC_SHAPES = (OVAL, CIRCLE)
@@ -128,6 +125,7 @@ INITIAL_SELECTION_SIZE = 50
 EMPTY_SELECTION = dict(
     frame=None,
     shape=None,
+    px_shape=None,
     center_x=None,
     center_y=None,
     width=None,
@@ -225,6 +223,69 @@ class Namespace(dict):
         del self[name]
 
 
+class FramesCache:
+
+    """Cache frames"""
+
+    def __init__(self,
+                 primary_dir=None,
+                 secondary_dir=None,
+                 limit=20,
+                 file_name_pattern=FRAME_PATTERN):
+        """Set paths"""
+        self.primary_path = pathlib.Path(primary_dir)
+        self.secondary_path = pathlib.Path(secondary_dir)
+        for current_path in (self.primary_path, self.secondary_path):
+            if not current_path.is_dir():
+                raise ValueError('%s is not a directory!')
+            #
+        #
+        # pylint: disable=pointless-statement ; Test for valid pattern
+        file_name_pattern % 1
+        # pylint: enable
+        self.pattern = file_name_pattern
+        self.limit = limit
+        self.__cache = dict()
+        self.__age = dict()
+
+    def pop(self, frame_number):
+        """Return the image for the number"""
+        try:
+            tk_image = self.__cache.pop(frame_number)
+        except KeyError:
+            return self.get_tk_image(frame_number)
+        #
+        self.__age.pop(frame_number, None)
+        return tk_image
+
+    def get_tk_image(self, frame_number):
+        """Read the frame from disk"""
+        frame_file = self.pattern % frame_number
+        for base_path in (self.primary_path, self.secondary_path):
+            frame_path = base_path / frame_file
+            if frame_path.is_file():
+                break
+            #
+        else:
+            raise ValueError('Frame %s not found' % frame_number)
+        #
+        vframe = pixelations.BaseImage(
+            frame_path,
+            canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+        return vframe.tk_original
+
+    def preload(self, frame_number):
+        """Load a frame into the cache"""
+        if frame_number not in self.__cache:
+            self.__cache[frame_number] = self.get_tk_image(frame_number)
+            self.__age[frame_number] = time.time()
+        #
+        if len(self.__cache) > self.limit:
+            # TODO: delete oldest content
+            logging.warning('Cache above limit!')
+        #
+
+
 class FrozenSelection:
 
     """Store a selection state"""
@@ -265,7 +326,7 @@ class FrozenSelection:
         return repr(tuple(self.effective_values.values()))
 
 
-class GenericProgress(gui_commons.TransientWindow):
+class TransientProgressDisplay(gui_commons.TransientWindow):
 
     """Show one progressbar in a transient modal window"""
 
@@ -500,7 +561,7 @@ class UserInterface:
     def action_preview(self):
         """Actions before showing the preview panel:
         Fix the selected end coordinates
-        TODO: apply the pixelations to all images
+        Apply the pixelations to all images
         """
         for item in self.vars.end_at:
             try:
@@ -515,6 +576,36 @@ class UserInterface:
         # Save pixelation start frame
         self.vars.opxsf.append(self.vars.start_at.frame)
         self.vars.spxsf = sorted(set(self.vars.opxsf))
+        # Set pixelations shape
+        px_shape = SHAPES[self.vars.start_at.shape]
+        if px_shape != SHAPES[self.vars.end_at.shape]:
+            raise ValueError('Shapes at start and end must be the same!')
+        #
+        self.vars.modified_frames = tempfile.TemporaryDirectory()
+        logging.info('Created tempdir %r', self.vars.modified_frames.name)
+        pixelator = pixelations.MultiFramePixelation(
+            pathlib.Path(self.vars.original_frames.name),
+            pathlib.Path(self.vars.modified_frames.name),
+            file_name_pattern=FRAME_PATTERN)
+        progress = TransientProgressDisplay(
+            self.main_window,
+            title='Applying pixelation',
+            label='Applying pixelation to selected frames …',
+            maximum=100)
+        for percentage in pixelator.pixelate_frames(
+                self.tkvars.selection.tilesize.get(),
+                px_shape,
+                self.vars.start_at,
+                self.vars.end_at):
+            progress.set_current_value(percentage)
+        #
+        progress.action_cancel()
+        self.vars.frames_cache = FramesCache(
+            primary_dir=self.vars.modified_frames.name,
+            secondary_dir=self.vars.original_frames.name,
+            limit=20)
+        self.__do_adjust_frame_limits()
+        self.__do_adjust_current_frame(1)
 
     def cb_indicator_drag_move(self, event):
         """Handle dragging of the indicator"""
@@ -683,13 +774,16 @@ class UserInterface:
         """Apply changes to the frames,
         and re-cycle them as original frames
         """
-        # TODO: fill up "modified" directory with missing frames
-        # self.complete_modified_directory()
+        logging.debug('Applying changes and reusing the frames')
+        self.vars.trace=False
+        # fill up "modified" directory with missing frames
+        self.__do_complete_modified_directory()
         #
         self.vars.original_frames.cleanup()
         self.vars.original_frames = self.vars.modified_frames
         self.vars.modified_frames = None
-        self.current_phase = CHOOSE_VIDEO
+        self.vars.trace=False
+        self.vars.current_panel = CHOOSE_VIDEO
         self.next_panel()
 
     def do_choose_video(self,
@@ -763,6 +857,23 @@ class UserInterface:
         #
         self.vars.undo_buffer.clear()
         self.next_panel()
+
+    def __do_complete_modified_directory(self):
+        """Fill up modified directory from souce directory"""
+        original_path = pathlib.Path(self.vars.original_frames.name)
+        target_path = pathlib.Path(self.vars.modified_frames.name)
+        for frame_number in range(1, self.vars.nb_frames +1):
+            frame_file = FRAME_PATTERN % frame_number
+            frame_target_path = target_path / frame_file
+            if not frame_target_path.exists():
+                frame_source_path = original_path / frame_file
+                logging.debug(
+                    'Renaming %r to %r',
+                    frame_source_path,
+                    frame_target_path)
+                frame_source_path.rename(frame_target_path)
+            #
+        #
 
     def __do_draw_indicator(self, stipple=None):
         """Draw the pixelation selector on the canvas,
@@ -850,7 +961,7 @@ class UserInterface:
             progress.action_cancel()
             raise ValueError(f'To many frames (maximum is {MAX_NB_FRAMES})!')
         #
-        progress = GenericProgress(
+        progress = TransientProgressDisplay(
             self.main_window,
             title='Loading video',
             label=f'Splitting {file_path.name} into frames …',
@@ -1040,37 +1151,6 @@ class UserInterface:
         """
         # TODO
         return False
-# =============================================================================
-#         try:
-#             last_applied_selection = self.vars.undo_buffer[-1][1]
-#         except IndexError:
-#             logging.debug('No last applied selection!')
-#         else:
-#             current_selection = FrozenSelection(self.tkvars.selection)
-#             logging.debug('Last applied selection: %s', last_applied_selection)
-#             logging.debug('Current selection:      %s', current_selection)
-#             logging.debug(
-#                 'Selections are equal: %r',
-#                 current_selection == last_applied_selection)
-#         #
-#         if self.vars.unapplied_changes:
-#             if not ask_to_apply:
-#                 return True
-#             #
-#             if self.tkvars.show_preview.get():
-#                 default_answer = messagebox.YES
-#             else:
-#                 default_answer = messagebox.NO
-#             #
-#             if messagebox.askyesno(
-#                     'Not yet applied changes',
-#                     'Pixelate the current selection before saving?',
-#                     default=default_answer):
-#                 self.do_apply_changes()
-#             #
-#         #
-#         return bool(self.vars.undo_buffer)
-# =============================================================================
 
     def __next_action(self):
         """Execute the next action"""
@@ -1189,6 +1269,45 @@ class UserInterface:
         self.__show_settings_frame(
             'End',
             allowed_shapes=allowed_shapes)
+
+    def panel_preview(self):
+        """Show a slider allowing to preview the modified video
+        """
+        image_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        # Destroy a pre-existing widget to remove variable limits set before
+        try:
+            self.widgets.frames_slider.destroy()
+        except AttributeError:
+            pass
+        #
+        self.widgets.frames_slider = tkinter.Scale(
+            image_frame,
+            from_=self.vars.frame_limits.minimum,
+            to=self.vars.frame_limits.maximum,
+            length=CANVAS_WIDTH,
+            label='Current frame:',
+            orient=tkinter.HORIZONTAL,
+            variable=self.tkvars.current_frame)
+        self.widgets.frames_slider.grid()
+        self.widgets.frame_canvas = tkinter.Canvas(
+            image_frame,
+            width=CANVAS_WIDTH,
+            height=CANVAS_HEIGHT)
+        self.widgets.frame_canvas.grid()
+        self.vars.trace = True
+        self.trigger_change_frame()
+        image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
+        sidebar_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        self.__show_frameinfo(
+            sidebar_frame,
+            'Current',
+            change_enabled=True)
+        sidebar_frame.columnconfigure(4, weight=100)
+        sidebar_frame.grid(row=0, column=1, **self.grid_fullwidth)
 
     def previous_panel(self):
         """Go to the next panel"""
@@ -1717,12 +1836,16 @@ class UserInterface:
             self.tkvars.current_frame.set(current_frame)
         #
         self.vars.trace = True
-        self.vars.frame_file = FRAME_PATTERN % current_frame
-        self.vars.vframe = pixelations.BaseImage(
-            pathlib.Path(self.vars.original_frames.name)
-            / self.vars.frame_file,
-            canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
-        self.vars.tk_image = self.vars.vframe.tk_original
+        if self.vars.current_panel == PREVIEW:
+            self.vars.tk_image = self.vars.frames_cache.pop(current_frame)
+        else:
+            self.vars.frame_file = FRAME_PATTERN % current_frame
+            self.vars.vframe = pixelations.BaseImage(
+                pathlib.Path(self.vars.original_frames.name)
+                / self.vars.frame_file,
+                canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+            self.vars.tk_image = self.vars.vframe.tk_original
+        #
         self.widgets.frame_canvas.create_image(
             0, 0,
             image=self.vars.tk_image,
