@@ -118,11 +118,20 @@ QUADRATIC_SHAPES = (CIRCLE, SQUARE)
 ALL_SHAPES = ELLIPTIC_SHAPES + RECTANGULAR_SHAPES
 
 MINIMUM_TILESIZE = 10
+DEFAULT_TILESIZE = 10
 MAXIMUM_TILESIZE = 200
 TILESIZE_INCREMENT = 5
 
 MINIMUM_SELECTION_SIZE = 20
 INITIAL_SELECTION_SIZE = 50
+
+EMPTY_SELECTION = dict(
+    frame=None,
+    shape=None,
+    center_x=None,
+    center_y=None,
+    width=None,
+    height=None)
 
 INDICATOR_OUTLINE_WIDTH = 5
 
@@ -326,23 +335,15 @@ class UserInterface:
             trace=False,
             unapplied_changes=False,
             undo_buffer=[],
+            # List of pixelation start frames
+            # (original sequence, and sorted unique)
+            opxsf=[],
+            spxsf=[],
             frame_limits=Namespace(
                 minimum=1,
                 maximum=1),
-            start_at=Namespace(
-                frame=None,
-                shape=None,
-                center_x=None,
-                center_y=None,
-                width=None,
-                height=None),
-            end_at=Namespace(
-                frame=None,
-                shape=None,
-                center_x=None,
-                center_y=None,
-                width=None,
-                height=None),
+            start_at=Namespace(**EMPTY_SELECTION),
+            end_at=Namespace(**EMPTY_SELECTION),
             drag_data=Namespace(
                 x=0,
                 y=0,
@@ -415,8 +416,7 @@ class UserInterface:
         """Actions before showing the start frame selection panel:
         Set frame range from the first to the last but 5th frame.
         """
-        self.vars.frame_limits.minimum = 1
-        self.vars.frame_limits.maximum = self.vars.nb_frames - 5
+        self.__do_adjust_frame_limits(maximum=self.vars.nb_frames - 5)
 
     def action_start_area(self):
         """Actions before showing the start area selection panel:
@@ -424,11 +424,14 @@ class UserInterface:
         Load the frame and set the variables
         """
         self.vars.start_at.frame = self.tkvars.current_frame.get()
+        logging.debug('Current frame# is %r', self.vars.start_at.frame)
         # self.vars.frame_file = FRAME_PATTERN % self.vars.start_at.frame
         self.vars.image = pixelations.FramePixelation(
             pathlib.Path(self.vars.original_frames.name)
             / self.vars.frame_file,
             canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+        # Set selection (pre-configured or empty)
+        self.__do_adjust_selection(self.vars.end_at)
         (im_width, im_height) = self.vars.image.original.size
         sel_width = self.tkvars.selection.width.get()
         if not sel_width:
@@ -454,20 +457,21 @@ class UserInterface:
         #
         # set tilesize
         if not self.tkvars.selection.tilesize.get():
-            self.tkvars.selection.tilesize.set(
-                pixelations.DEFAULT_TILESIZE)
+            self.tkvars.selection.tilesize.set(DEFAULT_TILESIZE)
         #
         # set the show_preview variable by default
         self.tkvars.show_preview.set(1)
 
     def action_end_frame(self):
-        """Actions before showing the start frame selection panel:
+        """Actions before showing the end frame selection panel:
         Set frame range from the selected start frame
         to the last frame.
         Fix the selected start coordinates
         """
-        self.vars.frame_limits.minimum = self.vars.start_at.frame + 1
-        self.vars.frame_limits.maximum = self.vars.nb_frames
+        self.__do_adjust_frame_limits(minimum=self.vars.start_at.frame + 1)
+        if self.vars.end_at.frame:
+            self.__do_adjust_current_frame(self.vars.end_at.frame)
+        #
         for item in self.vars.start_at:
             try:
                 source = self.tkvars.selection[item]
@@ -480,11 +484,13 @@ class UserInterface:
         #
 
     def action_end_area(self):
-        """Actions before showing the start area selection panel:
+        """Actions before showing the end area selection panel:
         Fix the selected frame as end frame.
-        TODO: load the image
+        Load the frame for area selection
         """
         self.vars.end_at.frame = self.tkvars.current_frame.get()
+        logging.debug('Current frame# is %r', self.vars.end_at.frame)
+        self.__do_adjust_selection(self.vars.end_at)
         # self.vars.frame_file = FRAME_PATTERN % self.vars.end_at.frame
         self.vars.image = pixelations.ImagePixelation(
             pathlib.Path(self.vars.original_frames.name)
@@ -492,11 +498,23 @@ class UserInterface:
             canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
 
     def action_preview(self):
-        """Actions before showing the start frame selection panel:
-        TODO: Fix the selected start coordinates
+        """Actions before showing the preview panel:
+        Fix the selected end coordinates
         TODO: apply the pixelations to all images
         """
-        ...
+        for item in self.vars.end_at:
+            try:
+                source = self.tkvars.selection[item]
+            except KeyError:
+                continue
+            #
+            value = source.get()
+            logging.debug('Setting end_at value for %r to %r', item, value)
+            self.vars.end_at[item] = value
+        #
+        # Save pixelation start frame
+        self.vars.opxsf.append(self.vars.start_at.frame)
+        self.vars.spxsf = sorted(set(self.vars.opxsf))
 
     def cb_indicator_drag_move(self, event):
         """Handle dragging of the indicator"""
@@ -616,6 +634,50 @@ class UserInterface:
             height=coordinates.height)
         # Trigger the selection change explicitly
         self.trigger_selection_change()
+
+    def __do_adjust_current_frame(self, new_current_frame):
+        """Adjust current frame without calling triggers"""
+        previous_trace_setting = self.vars.trace
+        logging.debug(
+            'Setting current frame# to %r', new_current_frame)
+        self.tkvars.current_frame.set(new_current_frame)
+        self.tkvars.current_frame_text.set(str(new_current_frame))
+        self.vars.trace = previous_trace_setting
+
+    def __do_adjust_frame_limits(self, minimum=None, maximum=None):
+        """Adjust frame limits without being restricted by
+        connections of the current_frame and current_frame_text
+        control variables to their its widgets
+        """
+        # TODO
+        # Destroy pre-existing widgets to remove variable limits set before
+        for widget in (self.widgets.frame_number, self.widgets.frames_slider):
+            try:
+                widget.destroy()
+            except AttributeError:
+                pass
+            #
+        #
+        self.vars.frame_limits.minimum = minimum or 1
+        self.vars.frame_limits.maximum = maximum or self.vars.nb_frames
+
+    def __do_adjust_selection(self, new_selection_vars):
+        """Adjust selection without calling triggers"""
+        previous_trace_setting = self.vars.trace
+        # TODO
+        for (item, value) in new_selection_vars.items():
+            try:
+                target = self.tkvars.selection[item]
+            except KeyError:
+                continue
+            #
+            if not value:
+                continue
+            #
+            logging.debug('Setting selection item %r to %r', item, value)
+            target.set(value)
+        #
+        self.vars.trace = previous_trace_setting
 
     def do_apply_and_recycle(self):
         """Apply changes to the frames,
@@ -844,6 +906,9 @@ class UserInterface:
             stdout='\n'.join(collected_stdout),
             stderr='\n'.join(collected_stderr))
         completed_process.check_returncode()
+        # Clear selection
+        self.vars.start_at = Namespace(**EMPTY_SELECTION)
+        self.vars.end_at = Namespace(**EMPTY_SELECTION)
         # set the original path and displayed file name
         self.vars.original_path = file_path
         self.tkvars.file_name.set(file_path.name)
@@ -942,8 +1007,8 @@ class UserInterface:
             return
         #
         reconfigure_widget(button_widget, state=new_state)
-        logging.debug(
-            '%r button state: %r => %r', button_name, old_state, new_state)
+        # logging.debug(
+        #    '%r button state: %r => %r', button_name, old_state, new_state)
 
     def __do_update_selection(self, **kwargs):
         """Update the selection for the provided key=value pairs"""
@@ -1123,7 +1188,6 @@ class UserInterface:
         #
         self.__show_settings_frame(
             'End',
-            fixed_tilesize=True,
             allowed_shapes=allowed_shapes)
 
     def previous_panel(self):
@@ -1176,15 +1240,66 @@ class UserInterface:
         self.main_window.destroy()
 
     def rollback_start_area(self):
-        """Actions when clicking th "previous" button
+        """Actions when clicking the "previous" button
         in the start area selection panel:
         Set frame range from the first to the last but 5th frame.
         Reset the current frame to the saved start frame
         """
-        self.vars.frame_limits.minimum = 1
-        self.vars.frame_limits.maximum = self.vars.nb_frames - 5
-        self.tkvars.current_frame.set(self.vars.start_at.frame)
+        # TODO
+        logging.debug(
+            '%s frame# is %r', 'Start', self.tkvars.current_frame.get())
+        ...
 
+    def rollback_end_frame(self):
+        """Actions when clicking the "previous" button
+        in the end_frame selection panel:
+        Set frame range from the first to the last but 5th frame.
+        Reset the current frame to the saved start frame
+        """
+        self.__do_adjust_frame_limits(maximum=self.vars.nb_frames - 5)
+        self.vars.trace = False
+        current_frame = self.vars.start_at.frame
+        self.__do_adjust_current_frame(current_frame)
+        self.vars.frame_file = FRAME_PATTERN % current_frame
+        self.vars.image = pixelations.ImagePixelation(
+            pathlib.Path(self.vars.original_frames.name)
+            / self.vars.frame_file,
+            canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+        #
+        self.__do_adjust_selection(self.vars.start_at)
+        self.vars.trace = True
+
+    def rollback_end_area(self):
+        """Actions when clicking the "previous" button
+        in the end area selection panel:
+        """
+        # TODO
+        logging.debug(
+            '%s frame# is %r', 'End', self.tkvars.current_frame.get())
+        ...
+
+    def rollback_preview(self):
+        """Actions when clicking the "previous" button
+        in the preview panel:
+        Reset the current frame to the saved end frame
+        Set the seclection to the selected end coordinates
+        Cleanup the modified_frames tempdir
+        """
+        self.__do_adjust_frame_limits(minimum=self.vars.start_at.frame + 1)
+        self.vars.trace = False
+        current_frame = self.vars.end_at.frame
+        self.__do_adjust_current_frame(current_frame)
+        self.vars.frame_file = FRAME_PATTERN % current_frame
+        self.vars.image = pixelations.ImagePixelation(
+            pathlib.Path(self.vars.original_frames.name)
+            / self.vars.frame_file,
+            canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+        #
+        self.__do_adjust_selection(self.vars.end_at)
+        self.vars.trace = True
+        self.vars.opxsf.pop()
+        self.vars.spxsf = sorted(set(self.vars.opxsf))
+        self.vars.modified_frames.cleanup()
 
     def show_about(self):
         """Show information about the application
@@ -1314,19 +1429,19 @@ class UserInterface:
             settings_frame,
             text='Tile size:')
         if fixed_tilesize:
-            tilesize = tkinter.Label(
-                settings_frame,
-                textvariable=self.tkvars.selection.tilesize)
+            ts_state = tkinter.DISABLED
         else:
-            tilesize = tkinter.Spinbox(
-                settings_frame,
-                from_=MINIMUM_TILESIZE,
-                to=MAXIMUM_TILESIZE,
-                increment=TILESIZE_INCREMENT,
-                justify=tkinter.RIGHT,
-                state='readonly',
-                width=4,
-                textvariable=self.tkvars.selection.tilesize)
+            ts_state = 'readonly'
+        #
+        tilesize = tkinter.Spinbox(
+            settings_frame,
+            from_=MINIMUM_TILESIZE,
+            to=MAXIMUM_TILESIZE,
+            increment=TILESIZE_INCREMENT,
+            justify=tkinter.RIGHT,
+            state=ts_state,
+            width=4,
+            textvariable=self.tkvars.selection.tilesize)
         #
         label.grid(sticky=tkinter.W, column=0)
         tilesize.grid(
@@ -1461,7 +1576,7 @@ class UserInterface:
         else:
             self.widgets.frame_number = tkinter.Label(
                 parent_frame,
-                textvariable=self.tkvars.current_frame)
+                textvariable=self.tkvars.current_frame_text)
         #
         label.grid(sticky=tkinter.W)
         self.widgets.frame_number.grid(
@@ -1492,6 +1607,8 @@ class UserInterface:
         """Select the start or end frame using a slider
         abd show that frame on a canvas
         """
+        logging.debug(
+            '%s frame# is %r', position, self.tkvars.current_frame.get())
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
@@ -1506,7 +1623,7 @@ class UserInterface:
             from_=self.vars.frame_limits.minimum,
             to=self.vars.frame_limits.maximum,
             length=CANVAS_WIDTH,
-            label='{position} frame:',
+            label=f'{position} frame:',
             orient=tkinter.HORIZONTAL,
             variable=self.tkvars.current_frame)
         self.widgets.frames_slider.grid()
@@ -1519,6 +1636,8 @@ class UserInterface:
         self.trigger_change_frame()
         image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
         self.__show_frameselection_sidebar(position)
+        logging.debug(
+            '%s frame# is %r', position, self.tkvars.current_frame.get())
 
     def __show_settings_frame(self,
                               frame_position,
