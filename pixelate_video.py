@@ -881,10 +881,6 @@ class UserInterface:
             frame_target_path = target_path / frame_file
             if not frame_target_path.exists():
                 frame_source_path = original_path / frame_file
-                logging.debug(
-                    'Renaming %r to %r',
-                    frame_source_path,
-                    frame_target_path)
                 frame_source_path.rename(frame_target_path)
             #
         #
