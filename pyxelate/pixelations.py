@@ -586,7 +586,7 @@ class MultiFramePixelation:
                     self.get_intermediate_value('width', offset),
                     self.get_intermediate_value('height', offset)))
             source_frame.result.save(self.target_path / file_name)
-            logging.debug('Saved pixelated frame# %r', current_frame)
+            # logging.debug('Saved pixelated frame# %r', current_frame)
             yield round(Fraction(100 * (offset + 1), (frames_diff + 1)))
         #
 

@@ -462,6 +462,10 @@ class UserInterface:
                 next_=None,
                 more=None,
                 save=None),
+            previewbuttons=Namespace(
+                previous=None,
+                next_=None,
+                play=None),
             frame_canvas=None,
             frames_slider=None,
             frame_number=None,
@@ -936,6 +940,30 @@ class UserInterface:
         canvas.tag_bind(
             'indicator', "<B1-Motion>", self.cb_indicator_drag_move)
 
+    def __do_jump_next_px(self):
+        """Jump to the next pixelation start"""
+        current_frame = self.tkvars.current_frame.get()
+        try:
+            new_frameno = min(
+                frameno for frameno in self.vars.spxsf
+                if frameno > current_frame)
+        except ValueError:
+            return
+        #
+        self.tkvars.current_frame.set(new_frameno)
+
+    def __do_jump_previous_px(self):
+        """Jump to the previous pixelation start"""
+        current_frame = self.tkvars.current_frame.get()
+        try:
+            new_frameno = max(
+                frameno for frameno in self.vars.spxsf
+                if frameno < current_frame)
+        except ValueError:
+            return
+        #
+        self.tkvars.current_frame.set(new_frameno)
+
     def __do_load_video(self, file_path):
         """Load the video and split it into frames,
         showing a progress bar (in an auto-closing modal window?)
@@ -1052,6 +1080,10 @@ class UserInterface:
             (width, height))
         self.__do_show_image()
 
+    def __do_play_flipbook(self):
+        """Play current video as a flipbook"""
+        raise NotImplementedError
+
     def do_save_file(self):
         """Save as the selected file,
         return True if the file was saved
@@ -1116,9 +1148,12 @@ class UserInterface:
                 textvariable=self.tkvars.selection.height)
         #
 
-    def __do_update_button(self, button_name, new_state):
+    def __do_update_button(self, button_name, new_state, collection=None):
         """Update a button state if required"""
-        button_widget = self.widgets.buttons[button_name]
+        if collection is None:
+            collection = self.widgets.buttons
+        #
+        button_widget = collection[button_name]
         try:
             old_state = get_widget_state(button_widget)
         except AttributeError:
@@ -1130,6 +1165,25 @@ class UserInterface:
         reconfigure_widget(button_widget, state=new_state)
         # logging.debug(
         #    '%r button state: %r => %r', button_name, old_state, new_state)
+
+    def __do_update_previewbuttons(self):
+        """Update button states if required"""
+        current_frame = self.tkvars.current_frame.get()
+        if any (frameno < current_frame for frameno in self.vars.spxsf):
+            previous_state = tkinter.NORMAL
+        else:
+            previous_state = tkinter.DISABLED
+        #
+        if any (frameno > current_frame for frameno in self.vars.spxsf):
+            next_state = tkinter.NORMAL
+        else:
+            next_state = tkinter.DISABLED
+        #
+        collection=self.widgets.previewbuttons
+        self.__do_update_button(
+            'previous', previous_state, collection=collection)
+        self.__do_update_button(
+            'next', next_state, collection=collection)
 
     def __do_update_selection(self, **kwargs):
         """Update the selection for the provided key=value pairs"""
@@ -1286,6 +1340,25 @@ class UserInterface:
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
+        buttonframe = tkinter.Frame(image_frame)
+        self.widgets.previewbuttons.previous = tkinter.Button(
+            buttonframe,
+            text='\u23ee Previous px start',
+            command=self.__do_jump_previous_px)
+        self.widgets.previewbuttons.next = tkinter.Button(
+            buttonframe,
+            text='\u23ef Next px start',
+            command=self.__do_jump_next_px)
+        self.widgets.previewbuttons.play = tkinter.Button(
+            buttonframe,
+            text='\u23f5 Play 2 seconds',
+            command=self.__do_play_flipbook,
+            state=tkinter.DISABLED)     # Not yet implemented
+        self.__do_update_previewbuttons()
+        self.widgets.previewbuttons.previous.grid(row=0, column=0)
+        self.widgets.previewbuttons.next.grid(row=0, column=1)
+        self.widgets.previewbuttons.play.grid(row=0, column=2)
+        buttonframe.grid(sticky=tkinter.W)
         # Destroy a pre-existing widget to remove variable limits set before
         try:
             self.widgets.frames_slider.destroy()
@@ -1818,7 +1891,9 @@ class UserInterface:
     def trigger_button_states(self, *unused_arguments):
         """Trigger undo, apply and save button states changes"""
         for (button_name, state_var) in self.tkvars.buttonstate.items():
-            self.__do_update_button(button_name, state_var.get())
+            self.__do_update_button(
+                button_name, state_var.get(),
+                collection=self.widgets.buttons)
         #
 
     def trigger_change_frame(self, *unused_arguments):
@@ -1850,6 +1925,7 @@ class UserInterface:
         self.vars.trace = True
         if self.vars.current_panel == PREVIEW:
             self.vars.tk_image = self.vars.frames_cache.pop(current_frame)
+            self.__do_update_previewbuttons()
         else:
             self.vars.frame_file = FRAME_PATTERN % current_frame
             self.vars.vframe = pixelations.BaseImage(
