@@ -24,7 +24,7 @@ the image or video file to pixelate as a command line parameter:
 `autoselect.py example.jpg`
 
 This will start **pixelate_image.py** for image files
-or the not yet implemented **pixelate_video.py** for video files.
+or **pixelate_video.py** for video files.
 
 See [pixelate images](docs/pixelate-images.md)
 and [pixelate videos](docs/pixelate-videos.md)

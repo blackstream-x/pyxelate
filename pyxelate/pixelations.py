@@ -552,7 +552,7 @@ class MultiFramePixelation:
         """
         return self.start[item] + round(self.gradients[item] * offset)
 
-    def pixelate_frames(self, tilesize, shape, start, end):
+    def pixelate_frames(self, tilesize, shape, start, end, quality=95):
         """Pixelate the frames and yield a progress fraction
         start and end must be Namespaces or dicts
         containing frame, center_x, center_y, width and height
@@ -585,11 +585,12 @@ class MultiFramePixelation:
                 (
                     self.get_intermediate_value('width', offset),
                     self.get_intermediate_value('height', offset)))
-            source_frame.result.save(self.target_path / file_name)
+            source_frame.result.save(
+                self.target_path / file_name,
+                quality=quality)
             # logging.debug('Saved pixelated frame# %r', current_frame)
             yield round(Fraction(100 * (offset + 1), (frames_diff + 1)))
         #
-
 
 
 # vim: fileencoding=utf-8 ts=4 sts=4 sw=4 autoindent expandtab syntax=python:

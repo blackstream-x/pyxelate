@@ -22,6 +22,8 @@ import tempfile
 import time
 import tkinter
 
+from fractions import Fraction
+
 from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
@@ -143,6 +145,7 @@ HEADINGS_FONT = (None, 10, 'bold')
 FRAME_PATTERN = 'frame%04d.jpg'
 MAX_NB_FRAMES = 9999
 
+ONE_MILLION = 1000000
 
 #
 # Helper Functions
@@ -378,15 +381,16 @@ class UserInterface:
 
     # pylint: disable=attribute-defined-outside-init
 
-    def __init__(self, file_path):
+    def __init__(self, file_path, options):
         """Build the GUI"""
         self.main_window = tkinter.Tk()
         self.main_window.title(MAIN_WINDOW_TITLE)
+        self.options = options
         self.vars = Namespace(
             original_frames=None,
             modified_frames=None,
             nb_frames=None,
-            framerate=None,
+            has_audio=False,
             current_panel=None,
             errors=[],
             tk_image=None,
@@ -394,12 +398,14 @@ class UserInterface:
             vframe=None,
             original_path=file_path,
             trace=False,
-            unapplied_changes=False,
+            unsaved_changes=False,
             undo_buffer=[],
             # List of pixelation start frames
             # (original sequence, and sorted unique)
             opxsf=[],
             spxsf=[],
+            frame_rate=None,
+            duration_usec=None,
             frame_limits=Namespace(
                 minimum=1,
                 maximum=1),
@@ -585,10 +591,12 @@ class UserInterface:
                 self.tkvars.selection.tilesize.get(),
                 px_shape,
                 self.vars.start_at,
-                self.vars.end_at):
+                self.vars.end_at,
+                quality='maximum'):
             progress.set_current_value(percentage)
         #
         progress.action_cancel()
+        self.vars.unsaved_changes = True
         self.vars.frames_cache = FramesCache(
             primary_dir=self.vars.modified_frames.name,
             secondary_dir=self.vars.original_frames.name,
@@ -718,7 +726,7 @@ class UserInterface:
     def __do_adjust_current_frame(self, new_current_frame):
         """Adjust current frame without calling triggers"""
         previous_trace_setting = self.vars.trace
-        self.vars.trace=False
+        self.vars.trace = False
         logging.debug(
             'Setting current frame# to %r', new_current_frame)
         self.tkvars.current_frame.set(new_current_frame)
@@ -766,11 +774,15 @@ class UserInterface:
             logging.debug('Storing selection item %r: %r', item, value)
             storage_vars[item] = value
         #
+        # Respect quadratic shapes
+        if storage_vars['shape'] in QUADRATIC_SHAPES:
+            storage_vars['height'] = storage_vars['width']
+        #
 
     def __do_adjust_selection(self, new_selection_vars):
         """Adjust selection without calling triggers"""
         previous_trace_setting = self.vars.trace
-        self.vars.trace=False
+        self.vars.trace = False
         for (item, value) in new_selection_vars.items():
             try:
                 target = self.tkvars.selection[item]
@@ -790,14 +802,13 @@ class UserInterface:
         and re-cycle them as original frames
         """
         logging.debug('Applying changes and reusing the frames')
-        self.vars.trace=False
         # fill up "modified" directory with missing frames
         self.__do_complete_modified_directory()
         #
         self.vars.original_frames.cleanup()
         self.vars.original_frames = self.vars.modified_frames
         self.vars.modified_frames = None
-        self.vars.trace=False
+        # self.vars.trace = False
         # Clear end selection
         self.__do_clear_selection(self.vars.end_at)
         #
@@ -847,7 +858,7 @@ class UserInterface:
                 file_path = None
                 continue
             #
-            if self.vars.unapplied_changes or self.vars.undo_buffer:
+            if self.vars.unsaved_changes or self.vars.undo_buffer:
                 confirmation = messagebox.askyesno(
                     'Unsaved Changes',
                     'Discard the chages made to'
@@ -880,7 +891,7 @@ class UserInterface:
         """Fill up modified directory from souce directory"""
         original_path = pathlib.Path(self.vars.original_frames.name)
         target_path = pathlib.Path(self.vars.modified_frames.name)
-        for frame_number in range(1, self.vars.nb_frames +1):
+        for frame_number in range(1, self.vars.nb_frames + 1):
             frame_file = FRAME_PATTERN % frame_number
             frame_target_path = target_path / frame_file
             if not frame_target_path.exists():
@@ -979,10 +990,13 @@ class UserInterface:
         progress.update_idletasks()
         logging.debug('Examining audio stream …')
         has_audio = bool(
-            ffmw.get_stream_info(file_path,
-                                 select_streams='a',
-                                 show_entries=ffmw.ENTRIES_ALL))
+            ffmw.get_stream_info(
+                file_path,
+                ffprobe_executable=self.options.ffprobe_executable,
+                select_streams='a',
+                show_entries=ffmw.ENTRIES_ALL))
         logging.info('%r has audio: %r', file_path.name, has_audio)
+        self.vars.has_audio = has_audio
         label = tkinter.Label(
             progress.body,
             text='Examining video stream …')
@@ -990,78 +1004,75 @@ class UserInterface:
         progress.update_idletasks()
         logging.debug('Examining video stream …')
         video_properties = ffmw.get_stream_info(
-            file_path, select_streams='v')
-        progress.action_cancel()
-        # TODO: validate video properties,
+            file_path,
+            ffprobe_executable=self.options.ffprobe_executable,
+            select_streams='v')
+        # Validate video properties,
         # especially nb_frames, duration and frame rates
-        nb_frames = int(video_properties['nb_frames'])
-        if nb_frames > MAX_NB_FRAMES:
+        nb_frames = None
+        frame_rate = None
+        duration_usec = None
+        try:
+            nb_frames = int(video_properties['nb_frames'])
+            frame_rate = Fraction(video_properties['avg_frame_rate'])
+            duration_usec = float(
+                video_properties['duration']) * ONE_MILLION
+        except ValueError as error:
+            logging.warning(error)
+            video_data = ffmw.count_all_frames(
+                file_path,
+                ffmpeg_executable=self.options.ffmpeg_executable)
+            nb_frames = int(video_data['frame'])
+            duration_usec = int(video_data['out_time_us'])
+            frame_rate = Fraction(nb_frames * ONE_MILLION, duration_usec)
+        finally:
             progress.action_cancel()
+        #
+        if nb_frames > MAX_NB_FRAMES:
             raise ValueError(f'To many frames (maximum is {MAX_NB_FRAMES})!')
         #
+        logging.debug('Duration (usec): %r', duration_usec)
+        if frame_rate.denominator > 1001:
+            logging.debug('Original frame rate: %s', frame_rate)
+            frame_rate = frame_rate.limit_denominator(100)
+        #
+        logging.debug('Frame rate: %s', frame_rate)
+        logging.debug('Number of frames: %s', nb_frames)
+        self.vars.duration_usec = duration_usec
+        self.vars.frame_rate = frame_rate
+        self.vars.nb_frames = nb_frames
         progress = TransientProgressDisplay(
             self.main_window,
             title='Loading video',
             label=f'Splitting {file_path.name} into frames …',
             maximum=nb_frames)
-        # Create temorary directory for original frames
-        self.vars.nb_frames = nb_frames
+        # Create a temorary directory for original frames
         self.vars.original_frames = tempfile.TemporaryDirectory()
         logging.info('Created tempdir %r', self.vars.original_frames.name)
         # Split into frames
-        kwargs = dict(
-            stderr=ffmw.AsynchronousLineReader,
-            stdout=ffmw.AsynchronousLineReader)
-        if sys.platform != 'win32':
-            kwargs['close_fds'] = True
-        #
-        collected_stdout = []
-        collected_stderr = []
-        process_info = ffmw.get_streams_and_process(
-            (
-                'ffmpeg', '-v', 'error', '-progress', '-',
-                '-i', str(file_path),
-                os.path.join(self.vars.original_frames.name, FRAME_PATTERN)),
-            **kwargs)
-        process = process_info['process']
-        stdout_reader = process_info['stdout']
-        stderr_reader = process_info['stderr']
-        while not stdout_reader.eof() or not stderr_reader.eof():
-            # Show what has been received from stderr and stdout,
-            # then sleep a short time before polling again
-            for line in stderr_reader.readlines():
-                line = line.decode().rstrip()
-                collected_stderr.append(line)
-                logging.error(line)
-            #
-            for line in stdout_reader.readlines():
-                line = line.decode().rstrip()
-                collected_stdout.append(line)
+        split_exec = ffmw.FFmpegWrapper(
+            '-i', str(file_path),
+            '-qscale:v', '1', '-qmin', '1',
+            os.path.join(self.vars.original_frames.name, FRAME_PATTERN),
+            executable=self.options.ffmpeg_executable)
+        split_exec.add_extra_arguments('-loglevel', 'error')
+        try:
+            for line in split_exec.stream(check=True):
                 if line.startswith('frame='):
                     value = line.split('=', 1)[1]
                     progress.set_current_value(int(value))
                 #
-            time.sleep(.1)
-        # Cleanup:
-        # Wait for the threads to end and close the file descriptors
-        stderr_reader.join()
-        stdout_reader.join()
-        process.stderr.close()
-        process.stdout.close()
-        progress.action_cancel()
-        completed_process = subprocess.CompletedProcess(
-            args=process.args,
-            returncode=process.wait(),
-            stdout='\n'.join(collected_stdout),
-            stderr='\n'.join(collected_stderr))
-        completed_process.check_returncode()
+            #
+        finally:
+            progress.action_cancel()
+        #
         # Clear selection
         self.vars.start_at = Namespace(**EMPTY_SELECTION)
         self.vars.end_at = Namespace(**EMPTY_SELECTION)
         # set the original path and displayed file name
         self.vars.original_path = file_path
         self.tkvars.file_name.set(file_path.name)
-        self.vars.unapplied_changes = False
+        self.vars.unsaved_changes = False
 
     def __do_pixelate(self):
         """Apply the pixelation to the image and update the preview"""
@@ -1088,30 +1099,57 @@ class UserInterface:
         """Save as the selected file,
         return True if the file was saved
         """
-        if not self.__get_save_recommendation(ask_to_apply=True):
-            messagebox.showinfo(
-                'Image unchanged', 'Nothing to save.')
-            return False
-        #
+        # fill up "modified" directory with missing frames
+        self.__do_complete_modified_directory()
         original_suffix = self.vars.original_path.suffix
-        filetypes = [('Supported image files', f'*{suffix}') for suffix
-                     in self.vars.save_support] + [('All files', '*.*')]
         selected_file = filedialog.asksaveasfilename(
             initialdir=str(self.vars.original_path.parent),
             defaultextension=original_suffix,
-            filetypes=filetypes,
             parent=self.main_window,
-            title='Save pixelated image as…')
+            title='Save pixelated video as…')
         if not selected_file:
             return False
         #
         logging.debug('Saving the file as %r', selected_file)
         #  save the file and reset the "touched" flag
-        self.vars.image.original.save(selected_file)
-        self.vars.original_path = pathlib.Path(selected_file)
-        self.tkvars.file_name.set(self.vars.original_path.name)
-        self.vars.undo_buffer.clear()
-        self.vars.unapplied_changes = False
+        # self.vars.image.original.save(selected_file)
+        file_path = pathlib.Path(selected_file)
+        progress = TransientProgressDisplay(
+            self.main_window,
+            title='Saving video',
+            label=f'Saving as {file_path.name} …',
+            maximum=self.vars.nb_frames)
+        # Build the video from the frames
+        arguments = [
+            '-framerate', str(self.vars.frame_rate),
+            '-i', os.path.join(self.vars.modified_frames.name, FRAME_PATTERN)]
+        if self.vars.has_audio:
+            arguments.extend([
+                '-i', str(self.vars.original_path),
+                '-map', '0:v', '-map', '1:a',
+                '-c:a', 'copy'])
+        #
+        arguments.extend([
+            '-c:v', 'libx264',
+            '-preset', 'slow',
+            '-crf', '17',
+            '-vf', f'fps={self.vars.frame_rate},format=yuv420p',
+            '-y', str(file_path)])
+        save_exec = ffmw.FFmpegWrapper(
+            *arguments,
+            executable=self.options.ffmpeg_executable)
+        save_exec.add_extra_arguments('-loglevel', 'error')
+        try:
+            for line in save_exec.stream(check=True):
+                if line.startswith('frame='):
+                    value = line.split('=', 1)[1]
+                    progress.set_current_value(int(value))
+                #
+            #
+        finally:
+            progress.action_cancel()
+        #
+        self.vars.unsaved_changes = False
         return True
 
     def __do_show_image(self):
@@ -1169,17 +1207,17 @@ class UserInterface:
     def __do_update_previewbuttons(self):
         """Update button states if required"""
         current_frame = self.tkvars.current_frame.get()
-        if any (frameno < current_frame for frameno in self.vars.spxsf):
+        if any(frameno < current_frame for frameno in self.vars.spxsf):
             previous_state = tkinter.NORMAL
         else:
             previous_state = tkinter.DISABLED
         #
-        if any (frameno > current_frame for frameno in self.vars.spxsf):
+        if any(frameno > current_frame for frameno in self.vars.spxsf):
             next_state = tkinter.NORMAL
         else:
             next_state = tkinter.DISABLED
         #
-        collection=self.widgets.previewbuttons
+        collection = self.widgets.previewbuttons
         self.__do_update_button(
             'previous', previous_state, collection=collection)
         self.__do_update_button(
@@ -1208,13 +1246,6 @@ class UserInterface:
             center_y=center_y,
             width=width,
             height=height)
-
-    def __get_save_recommendation(self, ask_to_apply=False):
-        """Return True or False (depending on the necessity to
-        save the video)
-        """
-        # TODO
-        return False
 
     def __next_action(self):
         """Execute the next action"""
@@ -1382,8 +1413,6 @@ class UserInterface:
         self.vars.trace = True
         self.trigger_change_frame()
         image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
-        # TODO: add play, stop, forward and backward buttons,
-        # and the matching handlers
         sidebar_frame = tkinter.Frame(
             self.widgets.action_area,
             **self.with_border)
@@ -1420,7 +1449,7 @@ class UserInterface:
         """Exit the application"""
         del event
         #
-        if self.__get_save_recommendation(ask_to_apply=False):
+        if self.vars.unsaved_changes:
             if messagebox.askyesno('Unsaved Changes', 'Save your changes?'):
                 if not self.do_save_file():
                     if not messagebox.askokcancel(
@@ -1969,7 +1998,6 @@ class UserInterface:
     def trigger_selection_change(self, *unused_arguments):
         """Trigger update after selection changed"""
         if self.vars.trace:
-            self.vars.unapplied_changes = True
             self.__do_pixelate()
             self.__do_draw_indicator()
         #
@@ -1999,6 +2027,14 @@ def __get_arguments():
         dest='loglevel',
         help='Limit message output to warnings and errors')
     argument_parser.add_argument(
+        '--ffmpeg-executable',
+        default=ffmw.FFMPEG,
+        help='ffmpeg executable (default: %(default)s)')
+    argument_parser.add_argument(
+        '--ffprobe-executable',
+        default=ffmw.FFPROBE,
+        help='ffprobe executable (default: %(default)s)')
+    argument_parser.add_argument(
         'image_file',
         nargs='?',
         type=pathlib.Path,
@@ -2016,7 +2052,7 @@ def main(arguments):
     if selected_file and not selected_file.is_file():
         selected_file = None
     #
-    UserInterface(selected_file)
+    UserInterface(selected_file, arguments)
 
 
 if __name__ == '__main__':
