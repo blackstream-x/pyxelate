@@ -26,12 +26,11 @@ from fractions import Fraction
 
 from tkinter import filedialog
 from tkinter import messagebox
-from tkinter import ttk
 
 # local modules
 
 from pyxelate import ffmpegwrappers as ffmw
-from pyxelate import gui_commons
+from pyxelate import gui
 from pyxelate import pixelations
 
 
@@ -170,14 +169,6 @@ def reconfigure_widget(widget, **kwargs):
         return
     #
     widget.config(**kwargs)
-
-
-def show_heading(frame, text, **kwargs):
-    """Show a heading in the headings font,
-    grid-positioned using **kwargs
-    """
-    heading = tkinter.Label(frame, font=HEADINGS_FONT, text=text)
-    heading.grid(**kwargs)
 
 
 #
@@ -332,42 +323,6 @@ class FrozenSelection:
     def __str__(self,):
         """Effective selection representation"""
         return repr(tuple(self.effective_values.values()))
-
-
-class TransientProgressDisplay(gui_commons.TransientWindow):
-
-    """Show one progressbar in a transient modal window"""
-
-    def __init__(self,
-                 parent,
-                 label=None,
-                 maximum=None,
-                 title=None):
-        """Create the toplevel window"""
-        self.maximum = maximum
-        super().__init__(parent, content=label, title=title)
-
-    def create_content(self, content):
-        """Create a progressbar"""
-        self.widgets['current_value'] = tkinter.IntVar()
-        label = tkinter.Label(
-            self.body,
-            text=content)
-        progressbar = ttk.Progressbar(
-            self.body,
-            length=300,
-            variable=self.widgets['current_value'],
-            maximum=self.maximum,
-            orient=tkinter.HORIZONTAL)
-        label.grid(sticky=tkinter.W)
-        progressbar.grid()
-        self.widgets['progress'] = progressbar
-
-    def set_current_value(self, current_value):
-        """Set the current value"""
-        self.widgets['current_value'].set(current_value)
-        self.widgets['progress'].update()
-        self.update_idletasks()
 
 
 class UserInterface:
@@ -587,7 +542,7 @@ class UserInterface:
             pathlib.Path(self.vars.original_frames.name),
             pathlib.Path(self.vars.modified_frames.name),
             file_name_pattern=FRAME_PATTERN)
-        progress = TransientProgressDisplay(
+        progress = gui.TransientProgressDisplay(
             self.main_window,
             title='Applying pixelation',
             label='Applying pixelation to selected frames …',
@@ -1029,7 +984,7 @@ class UserInterface:
         showing a progress bar (in an auto-closing modal window?)
         """
         # Get audio and video stream information
-        progress = gui_commons.TransientWindow(
+        progress = gui.TransientWindow(
             self.main_window,
             title=f'Loading {file_path.name} (step 1)')
         label = tkinter.Label(
@@ -1090,7 +1045,7 @@ class UserInterface:
         self.vars.duration_usec = duration_usec
         self.vars.frame_rate = frame_rate
         self.vars.nb_frames = nb_frames
-        progress = TransientProgressDisplay(
+        progress = gui.TransientProgressDisplay(
             self.main_window,
             title='Loading video',
             label=f'Splitting {file_path.name} into frames …',
@@ -1163,7 +1118,7 @@ class UserInterface:
         #  save the file and reset the "touched" flag
         # self.vars.image.original.save(selected_file)
         file_path = pathlib.Path(selected_file)
-        progress = TransientProgressDisplay(
+        progress = gui.TransientProgressDisplay(
             self.main_window,
             title='Saving video',
             label=f'Saving as {file_path.name} …',
@@ -1587,7 +1542,7 @@ class UserInterface:
         """Show information about the application
         in a modal dialog
         """
-        gui_commons.InfoDialog(
+        gui.InfoDialog(
             self.main_window,
             (SCRIPT_NAME,
              'Version: {0}\nProject homepage: {1}'.format(
@@ -1599,7 +1554,7 @@ class UserInterface:
     def __show_errors(self):
         """Show errors if there are any"""
         if self.vars.errors:
-            gui_commons.InfoDialog(
+            gui.InfoDialog(
                 self.main_window,
                 ('Errors:', '\n'.join(self.vars.errors)),
                 title='Errors occurred!')
@@ -1702,9 +1657,9 @@ class UserInterface:
                               fixed_tilesize=False,
                               allowed_shapes=ALL_SHAPES):
         """Show the shape part of the settings frame"""
-        show_heading(
+        heading = gui.Heading(
             settings_frame,
-            'Selection:',
+            text='Selection:',
             sticky=tkinter.W,
             columnspan=4)
         label = tkinter.Label(
@@ -1728,7 +1683,7 @@ class UserInterface:
         label.grid(sticky=tkinter.W, column=0)
         tilesize.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=1, columnspan=3)
+            row=gui.grid_row_of(label), column=1, columnspan=3)
         label = tkinter.Label(
             settings_frame,
             text='Shape:')
@@ -1739,7 +1694,7 @@ class UserInterface:
         label.grid(sticky=tkinter.W, column=0)
         shape_opts.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=1, columnspan=3)
+            row=gui.grid_row_of(label), column=1, columnspan=3)
         label = tkinter.Label(
             settings_frame,
             text='Width:')
@@ -1754,7 +1709,7 @@ class UserInterface:
         label.grid(sticky=tkinter.W, column=0)
         width.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=1, columnspan=3)
+            row=gui.grid_row_of(label), column=1, columnspan=3)
         label = tkinter.Label(
             settings_frame,
             text='Height:')
@@ -1769,7 +1724,7 @@ class UserInterface:
         label.grid(sticky=tkinter.W, column=0)
         self.widgets.height.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=1, columnspan=3)
+            row=gui.grid_row_of(label), column=1, columnspan=3)
         label = tkinter.Label(
             settings_frame,
             text='Center at x:')
@@ -1793,13 +1748,13 @@ class UserInterface:
         label.grid(sticky=tkinter.W, column=0)
         center_x.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=1)
+            row=gui.grid_row_of(label), column=1)
         label_sep.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=2)
+            row=gui.grid_row_of(label), column=2)
         center_y.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=3)
+            row=gui.grid_row_of(label), column=3)
         label = tkinter.Label(
             settings_frame,
             text='Preview:')
@@ -1812,16 +1767,16 @@ class UserInterface:
         label.grid(sticky=tkinter.W, column=0)
         preview_active.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=1, columnspan=3)
+            row=gui.grid_row_of(label), column=1, columnspan=3)
 
     def __show_frameinfo(self,
                          parent_frame,
                          frame_position,
                          change_enabled=False):
         """Show information about the current video frame"""
-        show_heading(
+        heading = gui.Heading(
             parent_frame,
-            'Original file:',
+            text='Original file:',
             sticky=tkinter.W,
             columnspan=4)
         label = tkinter.Label(
@@ -1833,9 +1788,9 @@ class UserInterface:
             text='Choose another file',
             command=self.do_choose_video)
         choose_button.grid(sticky=tkinter.W, columnspan=4)
-        show_heading(
+        heading = gui.Heading(
             parent_frame,
-            f'{frame_position} frame:',
+            text=f'{frame_position} frame:',
             sticky=tkinter.W,
             columnspan=4)
         label = tkinter.Label(
@@ -1863,7 +1818,7 @@ class UserInterface:
         label.grid(sticky=tkinter.W)
         self.widgets.frame_number.grid(
             sticky=tkinter.W, columnspan=3,
-            column=1, row=label.grid_info()['row'])
+            column=1, row=gui.grid_row_of(label))
         if self.vars.vframe.display_ratio > 1:
             scale_factor = 'Size: scaled down (factor: %r)' % float(
                 self.vars.vframe.display_ratio)
@@ -1935,9 +1890,9 @@ class UserInterface:
             settings_frame,
             fixed_tilesize=fixed_tilesize,
             allowed_shapes=allowed_shapes)
-        show_heading(
+        heading = gui.Heading(
             settings_frame,
-            'Indicator colours:',
+            text='Indicator colours:',
             sticky=tkinter.W,
             columnspan=4)
         label = tkinter.Label(
@@ -1950,7 +1905,7 @@ class UserInterface:
         label.grid(sticky=tkinter.W, column=0)
         color_opts.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=1, columnspan=3)
+            row=gui.grid_row_of(label), column=1, columnspan=3)
         label = tkinter.Label(
             settings_frame,
             text='New:')
@@ -1961,7 +1916,7 @@ class UserInterface:
         label.grid(sticky=tkinter.W, column=0)
         color_opts.grid(
             sticky=tkinter.W,
-            row=label.grid_info()['row'], column=1, columnspan=3)
+            row=gui.grid_row_of(label), column=1, columnspan=3)
         settings_frame.columnconfigure(4, weight=100)
         settings_frame.grid(row=0, column=1, **self.grid_fullwidth)
         self.__do_toggle_height()

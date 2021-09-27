@@ -2,7 +2,7 @@
 
 """
 
-gui_commons.py
+gui.py
 
 Common tkinter functionality
 
@@ -23,10 +23,53 @@ See the LICENSE file for more details.
 
 import tkinter
 
+from tkinter import ttk
+
+
+#
+# Constants
+#
+
+GRID_KEYWORDS = ('column', 'columnspan', 'in_', 'ipadx', 'ipady',
+                 'padx', 'pady', 'row', 'rowspan', 'sticky')
+
+
+#
+#
+#
+
+
+def grid_row_of(widget):
+    """Return the grid row of the widget"""
+    return widget.grid_info()['row']
+
 
 #
 # Classes
 #
+
+
+class Heading(tkinter.Label):   # pylint: disable=too-many-ancestors
+
+    """tkinter.Label subclass, directly positioned"""
+
+    def __init__(self, *args, font_size=10, font_style='bold', **kwargs):
+        """Extract grid arguments,
+        set font size and style unless overwritten using the
+        font=… keyword argument,
+        draw the widget and call its .grid() method
+        """
+        grid_arguments = {}
+        for keyword in GRID_KEYWORDS:
+            try:
+                grid_arguments[keyword] = kwargs.pop(keyword)
+            except KeyError:
+                continue
+            #
+        #
+        kwargs.setdefault('font', (None, font_size, font_style))
+        super().__init__(*args, **kwargs)
+        self.grid(**grid_arguments)
 
 
 class TransientWindow(tkinter.Toplevel):
@@ -67,6 +110,42 @@ class TransientWindow(tkinter.Toplevel):
         self.destroy()
 
 
+class TransientProgressDisplay(TransientWindow):
+
+    """Show one progressbar in a transient modal window"""
+
+    def __init__(self,
+                 parent,
+                 label=None,
+                 maximum=None,
+                 title=None):
+        """Create the toplevel window"""
+        self.maximum = maximum
+        super().__init__(parent, content=label, title=title)
+
+    def create_content(self, content):
+        """Create a progressbar"""
+        self.widgets['current_value'] = tkinter.IntVar()
+        label = tkinter.Label(
+            self.body,
+            text=content)
+        progressbar = ttk.Progressbar(
+            self.body,
+            length=300,
+            variable=self.widgets['current_value'],
+            maximum=self.maximum,
+            orient=tkinter.HORIZONTAL)
+        label.grid(sticky=tkinter.W)
+        progressbar.grid()
+        self.widgets['progress'] = progressbar
+
+    def set_current_value(self, current_value):
+        """Set the current value"""
+        self.widgets['current_value'].set(current_value)
+        self.widgets['progress'].update()
+        self.update_idletasks()
+
+
 class ModalDialog(TransientWindow):
 
     """Modal dialog with "ok" and "cancel" buttons,
@@ -88,17 +167,19 @@ class ModalDialog(TransientWindow):
     def create_content(self, content):
         """Add content to body"""
         for (heading, paragraph) in content:
-            heading_area = tkinter.Label(
+            Heading(
                 self.body,
                 text=heading,
-                font=(None, 11, 'bold'),
-                justify=tkinter.LEFT)
-            heading_area.grid(sticky=tkinter.W, padx=5, pady=10)
-            text_area = tkinter.Label(
+                font_size=11,
+                justify=tkinter.LEFT,
+                sticky=tkinter.W,
+                padx=5,
+                pady=10)
+            text_widget = tkinter.Label(
                 self.body,
                 text=paragraph,
                 justify=tkinter.LEFT)
-            text_area.grid(sticky=tkinter.W, padx=5, pady=5)
+            text_widget.grid(sticky=tkinter.W, padx=5, pady=5)
         #
 
     def create_buttonbox(self, cancel_button=True):
