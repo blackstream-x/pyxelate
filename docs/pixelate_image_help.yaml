@@ -1,0 +1,42 @@
+# Help file for pixelate-image.py
+
+Global:
+  pixelate-image: |
+    This is a script for pixelating partial areas of images.
+    Simply drag the selection around, or create a new one by dragging
+    outside of the selection indicator.
+    Fine-tune selection position and size using the controls
+    in the “Selection” section of the right panel.
+    Click the “✓Apply” button to apply the pixelation at the indicated
+    position.
+
+Original file:
+  The fist line: shows the name of the current image file
+  The button: allows loading another image file
+
+Display:
+  Size: shows the scaling factor of the loaded image
+
+Selection:
+  Description: Selection of the area to be pixelated
+  Tilesize: |
+    Change the size of the blurred tiles.
+    Minimum is 10 pixels, maximum 200 pixels.
+  Shape: Choose from elliptic or rectangular shapes.
+  Width and Height: |
+    Fine-tune selection width and height here.
+    For “quadratic” shapes (i.e. square and circle), the height will
+    follow the width.
+    Minimum is 20 pixels.
+  "Center at x/y": Fine-tune the selection center here.
+  Preview: |
+    Show or suppress the preview of the not-yet-applied pixelation.
+    This might be useful if you are not sure whether you already applied
+    the pixelation at he current position or not.
+
+Indicator colours:
+  Current: |
+    Here you can choose the colour of the current indicator
+    (for better contrast against the image)
+  New: Colour of the frame shown when dragging a new selection
+

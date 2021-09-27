@@ -69,6 +69,10 @@ except OSError as error:
     VERSION = '(Version file is missing: %s)' % error
 #
 
+HELP = dict(
+    selection='This is the selection of the area to be pixelated',
+)
+
 # Phases
 CHOOSE_VIDEO = 'choose_video'
 START_FRAME = 'start_frame'
@@ -1561,6 +1565,21 @@ class UserInterface:
             self.vars.errors.clear()
         #
 
+    def __show_help(self, topic='Global'):
+        """Show help for the provided topic"""
+        try:
+            info_sequence = list(HELP[topic].items())
+        except AttributeError:
+            # Not a hash
+            info_sequence = [(f'{topic} help:', HELP[topic])]
+        except KeyError:
+            info_sequence = [('Error:', f'No help for {topic} available yet')]
+        #
+        gui.InfoDialog(
+            self.main_window,
+            *info_sequence,
+            title=f'Help ({topic})')
+
     def __show_panel(self):
         """Show a panel.
         Add the "Previous", "Next", "Choose another relase",
@@ -1662,6 +1681,17 @@ class UserInterface:
             text='Selection:',
             sticky=tkinter.W,
             columnspan=4)
+
+        # TODO
+        def show_help(self=self):
+            return self.__show_help('Selection')
+        #
+        help_button = tkinter.Button(
+            settings_frame,
+            text='\u2753',
+            command=show_help)
+        help_button.grid(
+            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
         label = tkinter.Label(
             settings_frame,
             text='Tile size:')

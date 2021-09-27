@@ -12,6 +12,7 @@ Pixelate a part of an image
 
 
 import argparse
+import json
 import logging
 import os
 import pathlib
@@ -26,6 +27,17 @@ from tkinter import messagebox
 
 from pyxelate import gui
 from pyxelate import pixelations
+
+
+try:
+    import yaml
+except ImportError:
+    HELP_LOADER = json.Load
+    HELP_SUFFIX = '.json'
+else:
+    HELP_LOADER = yaml.safe_load
+    HELP_SUFFIX = '.yaml'
+#
 
 
 #
@@ -61,6 +73,12 @@ try:
     VERSION = VERSION_PATH.read_text().strip()
 except OSError as error:
     VERSION = '(Version file is missing: %s)' % error
+#
+
+with open(SCRIPT_PATH.parent /
+          'docs' /
+          f'pixelate_image_help{HELP_SUFFIX}') as help_file:
+    HELP = HELP_LOADER(help_file)
 #
 
 # Phases
@@ -975,6 +993,21 @@ class UserInterface:
             self.vars.errors.clear()
         #
 
+    def __show_help(self, topic='Global'):
+        """Show help for the provided topic"""
+        try:
+            info_sequence = list(HELP[topic].items())
+        except AttributeError:
+            # Not a hash -> generate a heading
+            info_sequence = [(f'{topic} help:', HELP[topic])]
+        except KeyError:
+            info_sequence = [('Error:', f'No help for {topic} available yet')]
+        #
+        gui.InfoDialog(
+            self.main_window,
+            *info_sequence,
+            title=f'Help ({topic})')
+
     def __show_panel(self):
         """Show a panel.
         Add the "Previous", "Next", "Choose another relase",
@@ -1033,11 +1066,16 @@ class UserInterface:
         #
         self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
         self.trigger_button_states()
+        help_button = tkinter.Button(
+            buttons_area,
+            text='\u2753 Help',
+            command=self.__show_help)
+        help_button.grid(row=1, column=0, **buttons_grid)
         about_button = tkinter.Button(
             buttons_area,
             text='\u24d8 About',
             command=self.show_about)
-        about_button.grid(row=1, column=0, **buttons_grid)
+        about_button.grid(row=1, column=1, **buttons_grid)
         quit_button = tkinter.Button(
             buttons_area,
             text='\u23fb Quit',
@@ -1056,6 +1094,17 @@ class UserInterface:
             text='Selection:',
             sticky=tkinter.W,
             columnspan=4)
+
+        # TODO
+        def show_help(self=self):
+            return self.__show_help('Selection')
+        #
+        help_button = tkinter.Button(
+            settings_frame,
+            text='\u2753',
+            command=show_help)
+        help_button.grid(
+            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
         label = tkinter.Label(
             settings_frame,
             text='Tile size:')
@@ -1175,6 +1224,17 @@ class UserInterface:
             text='Original file:',
             sticky=tkinter.W,
             columnspan=4)
+
+        # TODO
+        def show_help(self=self):
+            return self.__show_help('Original file')
+        #
+        help_button = tkinter.Button(
+            settings_frame,
+            text='\u2753',
+            command=show_help)
+        help_button.grid(
+            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
         label = tkinter.Label(
             settings_frame,
             textvariable=self.tkvars.file_name)
@@ -1189,6 +1249,17 @@ class UserInterface:
             text='Display:',
             sticky=tkinter.W,
             columnspan=4)
+
+        # TODO
+        def show_help(self=self):
+            return self.__show_help('Display')
+        #
+        help_button = tkinter.Button(
+            settings_frame,
+            text='\u2753',
+            command=show_help)
+        help_button.grid(
+            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
         if self.vars.image.display_ratio > 1:
             scale_factor = 'Size: scaled down (factor: %r)' % float(
                 self.vars.image.display_ratio)
@@ -1206,6 +1277,17 @@ class UserInterface:
             text='Indicator colours:',
             sticky=tkinter.W,
             columnspan=4)
+
+        # TODO
+        def show_help(self=self):
+            return self.__show_help('Indicator colours')
+        #
+        help_button = tkinter.Button(
+            settings_frame,
+            text='\u2753',
+            command=show_help)
+        help_button.grid(
+            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
         label = tkinter.Label(
             settings_frame,
             text='Current:')

@@ -170,14 +170,13 @@ class ModalDialog(TransientWindow):
             Heading(
                 self.body,
                 text=heading,
-                font_size=11,
                 justify=tkinter.LEFT,
                 sticky=tkinter.W,
                 padx=5,
-                pady=10)
+                pady=5)
             text_widget = tkinter.Label(
                 self.body,
-                text=paragraph,
+                text=paragraph.strip(),
                 justify=tkinter.LEFT)
             text_widget.grid(sticky=tkinter.W, padx=5, pady=5)
         #
