@@ -133,7 +133,7 @@ EMPTY_SELECTION = dict(
     width=None,
     height=None)
 
-INDICATOR_OUTLINE_WIDTH = 5
+INDICATOR_OUTLINE_WIDTH = 2
 
 POSSIBLE_INDICATOR_COLORS = (
     'white', 'black', 'red', 'green', 'blue', 'cyan', 'yellow', 'magenta')
@@ -146,6 +146,11 @@ FRAME_PATTERN = 'frame%04d.jpg'
 MAX_NB_FRAMES = 9999
 
 ONE_MILLION = 1000000
+
+# Items drawn on the canvas
+INDICATOR = 'indicator'
+NEW_SELECTION = 'new_selection'
+
 
 #
 # Helper Functions
@@ -618,17 +623,19 @@ class UserInterface:
         self.vars.drag_data.x = current_x
         self.vars.drag_data.y = current_y
         # Update the selection (position only)
-        coordinates = self.__get_bbox_selection('indicator')
+        coordinates = self.__get_bbox_selection(INDICATOR)
         self.__do_update_selection(
             center_x=coordinates.center_x,
             center_y=coordinates.center_y)
+        return True
 
     def cb_indicator_drag_start(self, event):
         """Begining drag of the indicator"""
         # record the item and its location
-        self.vars.drag_data.item = 'indicator'
+        self.vars.drag_data.item = INDICATOR
         self.vars.drag_data.x = event.x
         self.vars.drag_data.y = event.y
+        return True
 
     def cb_indicator_drag_stop(self, *unused_event):
         """End drag of an object"""
@@ -638,9 +645,13 @@ class UserInterface:
         self.vars.drag_data.y = 0
         # Trigger the selection change explicitly
         self.trigger_selection_change()
+        return True
 
     def cb_selection_drag_move(self, event):
         """Drag a new selection"""
+        if self.vars.drag_data.item == INDICATOR:
+            return self.cb_indicator_drag_move(event)
+        #
         current_x = event.x
         current_y = event.y
         [left, right] = sorted((current_x, self.vars.drag_data.x))
@@ -665,7 +676,7 @@ class UserInterface:
             #
         #
         # Draw a new selection outline
-        self.widgets.canvas.delete('size')
+        self.widgets.canvas.delete(NEW_SELECTION)
         outer_dash = (1, 1)
         shape = self.tkvars.selection.shape.get()
         current_color = self.tkvars.indicator.drag_color.get()
@@ -676,37 +687,45 @@ class UserInterface:
             left, top, right, bottom,
             dash=outer_dash,
             outline=current_color,
-            tags='size')
+            tags=NEW_SELECTION)
         if shape in ELLIPTIC_SHAPES:
             self.widgets.canvas.create_oval(
                 left, top, right, bottom,
                 dash=(1, 1),
                 outline=current_color,
-                tags='size')
+                tags=NEW_SELECTION)
         # Update the selection
-        coordinates = self.__get_bbox_selection('size')
+        coordinates = self.__get_bbox_selection(NEW_SELECTION)
         self.__do_update_selection(
             center_x=coordinates.center_x,
             center_y=coordinates.center_y,
             width=coordinates.width,
             height=coordinates.height)
+        return True
 
     def cb_selection_drag_start(self, event):
         """Begining dragging for a new selection"""
         # record the item and its location
-        self.vars.drag_data.item = 'size'
+        if self.__clicked_inside_indicator(event):
+            return self.cb_indicator_drag_start(event)
+        #
+        self.vars.drag_data.item = NEW_SELECTION
         self.vars.drag_data.x = event.x
         self.vars.drag_data.y = event.y
+        return True
 
     def cb_selection_drag_stop(self, *unused_event):
         """End drag for a new selection"""
+        if self.vars.drag_data.item == INDICATOR:
+            return self.cb_indicator_drag_stop()
+        #
         try:
-            coordinates = self.__get_bbox_selection('size')
+            coordinates = self.__get_bbox_selection(NEW_SELECTION)
         except TypeError:
             # No selection dragged (i.e. click without dragging)
-            return
+            return False
         #
-        self.widgets.canvas.delete('size')
+        self.widgets.canvas.delete(NEW_SELECTION)
         # Adjust to minimum sizes
         if coordinates.width < MINIMUM_SELECTION_SIZE:
             coordinates.width = MINIMUM_SELECTION_SIZE
@@ -722,6 +741,36 @@ class UserInterface:
             height=coordinates.height)
         # Trigger the selection change explicitly
         self.trigger_selection_change()
+        return True
+
+    def __clicked_inside_indicator(self, event):
+        """Return True if the click was inside the indicator"""
+        try:
+            (left, top, right, bottom) = self.widgets.canvas.bbox(INDICATOR)
+        except TypeError as error:
+            logging.debug(error)
+        #
+        x_position = event.x
+        y_position = event.y
+        if left <= x_position <= right and top <= y_position <= bottom:
+            if self.tkvars.selection.shape in RECTANGULAR_SHAPES:
+                return True
+            #
+            # Apply the standard ellipse equation
+            # (see https://en.wikipedia.org/wiki/Ellipse#Standard_equation)
+            # to check if the event was inside or outside the ellipse
+            center_x = (left + right) / 2
+            center_y = (top + bottom) / 2
+            relative_x = x_position - center_x
+            relative_y = y_position - center_y
+            semi_x = center_x - left
+            semi_y = center_y - top
+            if (relative_x ** 2 / semi_x ** 2) + \
+                    (relative_y ** 2 / semi_y ** 2) <= 1:
+                return True
+            #
+        #
+        return False
 
     def __do_adjust_current_frame(self, new_current_frame):
         """Adjust current frame without calling triggers"""
@@ -925,7 +974,7 @@ class UserInterface:
         top = center_y - height // 2
         bottom = top + height
         shape = self.tkvars.selection.shape.get()
-        canvas.delete('indicator')
+        canvas.delete(INDICATOR)
         if shape in ELLIPTIC_SHAPES:
             create_widget = canvas.create_oval
         elif shape in RECTANGULAR_SHAPES:
@@ -935,7 +984,7 @@ class UserInterface:
         appearance = dict(
             width=INDICATOR_OUTLINE_WIDTH,
             outline=current_color,
-            tags='indicator')
+            tags=INDICATOR)
         if stipple:
             appearance.update(
                 dict(width=1, fill=current_color, stipple=stipple))
@@ -945,11 +994,11 @@ class UserInterface:
             **appearance)
         # add bindings to drag the selector over the image
         canvas.tag_bind(
-            'indicator', "<ButtonPress-1>", self.cb_indicator_drag_start)
+            INDICATOR, "<ButtonPress-1>", self.cb_indicator_drag_start)
         canvas.tag_bind(
-            'indicator', "<ButtonRelease-1>", self.cb_indicator_drag_stop)
+            INDICATOR, "<ButtonRelease-1>", self.cb_indicator_drag_stop)
         canvas.tag_bind(
-            'indicator', "<B1-Motion>", self.cb_indicator_drag_move)
+            INDICATOR, "<B1-Motion>", self.cb_indicator_drag_move)
 
     def __do_jump_next_px(self):
         """Jump to the next pixelation start"""
@@ -1170,7 +1219,7 @@ class UserInterface:
             image=self.vars.tk_image,
             anchor=tkinter.NW,
             tags='image')
-        canvas.tag_lower('image', 'indicator')
+        canvas.tag_lower('image', INDICATOR)
 
     def __do_toggle_height(self):
         """Toggle height spinbox to follow width"""

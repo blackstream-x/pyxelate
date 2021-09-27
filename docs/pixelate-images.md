@@ -14,7 +14,7 @@ This is an example of the GUI:
 ![Screenshot of the GUI while creating this project’s logo](./making_of_the_logo.png "Making of this project’s logo")
 
 In the left panel, the image is loaded, and an indicator is displayed.
-You can grab the indicator by its outline and drag it around,
+You can grab the indicator and drag it around,
 or create a new selection by dragging with the mouse anywhere else in the image.
 
 On the right panel, you can choose another image,
