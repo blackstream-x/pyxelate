@@ -8,6 +8,18 @@ pixelate_video.py
 Partially pixelate selected frames of a (short) video clip
 (Tkinter-based GUI assistant)
 
+Copyright (C) 2021 Rainer Schwarzbach
+
+This file is part of pyxelate.
+
+pyxelate is free software: you can redistribute it and/or modify
+it under the terms of the MIT License.
+
+pyxelate is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the LICENSE file for more details.
+
 """
 
 
@@ -29,6 +41,7 @@ from tkinter import messagebox
 
 # local modules
 
+from pyxelate import app
 from pyxelate import ffmpegwrappers as ffmw
 from pyxelate import gui
 from pyxelate import pixelations
@@ -327,6 +340,117 @@ class FrozenSelection:
     def __str__(self,):
         """Effective selection representation"""
         return repr(tuple(self.effective_values.values()))
+
+
+class Panels(app.Panels):
+
+    """Panels and panel components"""
+
+    def component_frameselection(self, position):
+        """Select the start or end frame using a slider
+        abd show that frame on a canvas
+        """
+        logging.debug(
+            '%s frame# is %r', position, self.tkvars.current_frame.get())
+        image_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        # Destroy a pre-existing widget to remove variable limits set before
+        try:
+            self.widgets.frames_slider.destroy()
+        except AttributeError:
+            pass
+        #
+        self.widgets.frames_slider = tkinter.Scale(
+            image_frame,
+            from_=self.vars.frame_limits.minimum,
+            to=self.vars.frame_limits.maximum,
+            length=self.ui_instance.canvas_width,
+            label=f'{position} frame:',
+            orient=tkinter.HORIZONTAL,
+            variable=self.tkvars.current_frame)
+        self.widgets.frames_slider.grid()
+        self.widgets.frame_canvas = tkinter.Canvas(
+            image_frame,
+            width=self.ui_instance.canvas_width,
+            height=self.ui_instance.canvas_height)
+        self.widgets.frame_canvas.grid()
+        self.vars.trace = True
+        self.ui_instance.callbacks.trigger_change_frame()
+        image_frame.grid(row=0, column=0, rowspan=3, **self.grid_fullwidth)
+        self.sidebar_frameselection(position)
+        logging.debug(
+            '%s frame# is %r', position, self.tkvars.current_frame.get())
+
+    def component_image_info(self,
+                             parent_frame,
+                             frame_position,
+                             change_enabled=False):
+        """Show information about the current video frame"""
+        # TODO: replace by image related component
+        heading = gui.Heading(
+            parent_frame,
+            text=f'{frame_position} frame:',
+            sticky=tkinter.W,
+            columnspan=4)
+
+        # TODO
+        def show_help(self=self):
+            return self.ui_instance.show_help('Frame')
+        #
+        help_button = tkinter.Button(
+            parent_frame,
+            text='\u2753',
+            command=show_help)
+        help_button.grid(
+            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
+        label = tkinter.Label(
+            parent_frame,
+            text='Number:')
+        # Destroy a pre-existing widget to remove variable limits set before
+        try:
+            self.widgets.frame_number.destroy()
+        except AttributeError:
+            pass
+        #
+        if change_enabled:
+            self.widgets.frame_number = tkinter.Spinbox(
+                parent_frame,
+                from_=self.vars.frame_limits.minimum,
+                to=self.vars.frame_limits.maximum,
+                textvariable=self.tkvars.current_frame_text,
+                state='readonly',
+                width=4)
+        else:
+            self.widgets.frame_number = tkinter.Label(
+                parent_frame,
+                textvariable=self.tkvars.current_frame_text)
+        #
+        label.grid(sticky=tkinter.W)
+        self.widgets.frame_number.grid(
+            sticky=tkinter.W, columnspan=3,
+            column=1, row=gui.grid_row_of(label))
+        if self.vars.vframe.display_ratio > 1:
+            scale_factor = 'Size: scaled down (factor: %r)' % float(
+                self.vars.vframe.display_ratio)
+        else:
+            scale_factor = 'Size: original dimensions'
+        #
+        label = tkinter.Label(parent_frame, text=scale_factor)
+        label.grid(sticky=tkinter.W, columnspan=4)
+
+    def sidebar_frameselection(self, frame_position):
+        """Show the settings frame"""
+        frameselection_frame = tkinter.Frame(
+            self.widgets.action_area,
+            **self.with_border)
+        self.component_frame_info(
+            frameselection_frame,
+            frame_position,
+            change_enabled=True)
+        frameselection_frame.columnconfigure(4, weight=100)
+        frameselection_frame.grid(row=0, column=1, **self.grid_fullwidth)
+
 
 
 class UserInterface:
