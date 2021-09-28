@@ -1,0 +1,25 @@
+{
+  "Global": {
+    "pixelate_video.py": "This is a script for pixelating partial areas of a number of frames in a\n(short) video clip.\nWhen loading a video, it will be split up into frames in a temporary directory.\n\nThe workflow in this script is\\:\n1. Select a start frame.\n2. Select the area where the pixelation will start in the selected start frame.\n3. Select an end frame.\n4. Select the area where the pixelation will end in the selected end frame.\n5. Preview the partially pixelated video (flip book style)\n6. Save the video and/or create another pixelation in the same video.\n"
+  },
+  "Original file": {
+    "The first line": "shows the name of the current video file",
+    "The button": "allows loading another video file"
+  },
+  "Display": {
+    "Size": "shows the scaling factor of the loaded frame"
+  },
+  "Selection": {
+    "Selection": "Drag the selection around, or create a new one by dragging\noutside of the selection indicator.\nFine-tune selection size and position using the controls\ndescribed below.\nWhen clicking the \u201c\u25b7 Next\u201d Button, the current selection\nwill be set as start (or end) of the pixelation.\n",
+    "Tile size": "Change the size of the blurred tiles in intervals of 5 pixels.\nMinimum is 10 pixels, maximum 200 pixels.\n",
+    "Shape": "Choose from elliptic or rectangular shapes.",
+    "Width and Height": "Fine-tune selection width and height here.\nFor \u201cquadratic\u201d shapes (i.e. square and circle), the height will\n\nfollow the width. Minimum is 20 pixels in each dimension.\n",
+    "Center at x/y": "Fine-tune the selection center here.",
+    "Preview": "Show or suppress the preview of the not-yet-applied pixelation.\n"
+  },
+  "Indicator colours": {
+    "Change these colours for better contrast with the frame": null,
+    "Current": "Colour of the current indicator",
+    "New": "Colour of the \u201crubberband\u201d shown when dragging a new selection"
+  }
+}

@@ -29,17 +29,6 @@ from pyxelate import gui
 from pyxelate import pixelations
 
 
-try:
-    import yaml
-except ImportError:
-    HELP_LOADER = json.Load
-    HELP_SUFFIX = '.json'
-else:
-    HELP_LOADER = yaml.safe_load
-    HELP_SUFFIX = '.yaml'
-#
-
-
 #
 # Constants
 #
@@ -77,8 +66,8 @@ except OSError as error:
 
 with open(SCRIPT_PATH.parent /
           'docs' /
-          f'pixelate_image_help{HELP_SUFFIX}') as help_file:
-    HELP = HELP_LOADER(help_file)
+          f'{SCRIPT_PATH.stem}_help.json') as help_file:
+    HELP = json.load(help_file)
 #
 
 # Phases

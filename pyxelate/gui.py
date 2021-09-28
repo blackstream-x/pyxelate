@@ -174,6 +174,9 @@ class ModalDialog(TransientWindow):
                 sticky=tkinter.W,
                 padx=5,
                 pady=5)
+            if paragraph is None:
+                continue
+            #
             text_widget = tkinter.Label(
                 self.body,
                 text=paragraph.strip(),

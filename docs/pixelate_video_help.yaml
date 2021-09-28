@@ -1,0 +1,47 @@
+Global:
+  "pixelate_video.py": |
+    This is a script for pixelating partial areas of a number of frames in a
+    (short) video clip.
+    When loading a video, it will be split up into frames in a temporary directory.
+
+    The workflow in this script is\:
+    1. Select a start frame.
+    2. Select the area where the pixelation will start in the selected start frame.
+    3. Select an end frame.
+    4. Select the area where the pixelation will end in the selected end frame.
+    5. Preview the partially pixelated video (flip book style)
+    6. Save the video and/or create another pixelation in the same video.
+
+Original file:
+  The first line: shows the name of the current video file
+  The button: allows loading another video file
+
+Display:
+  Size: shows the scaling factor of the loaded frame
+
+Selection:
+  Selection: |
+    Drag the selection around, or create a new one by dragging
+    outside of the selection indicator.
+    Fine-tune selection size and position using the controls
+    described below.
+    When clicking the “▷ Next” Button, the current selection
+    will be set as start (or end) of the pixelation.
+  Tile size: |
+    Change the size of the blurred tiles in intervals of 5 pixels.
+    Minimum is 10 pixels, maximum 200 pixels.
+  Shape: Choose from elliptic or rectangular shapes.
+  Width and Height: |
+    Fine-tune selection width and height here.
+    For “quadratic” shapes (i.e. square and circle), the height will
+
+    follow the width. Minimum is 20 pixels in each dimension.
+  "Center at x/y": Fine-tune the selection center here.
+  Preview: |
+    Show or suppress the preview of the not-yet-applied pixelation.
+
+Indicator colours:
+  Change these colours for better contrast with the frame:
+  Current: Colour of the current indicator
+  New: Colour of the “rubberband” shown when dragging a new selection
+
