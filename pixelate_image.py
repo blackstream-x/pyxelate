@@ -253,19 +253,28 @@ class ImageCallbacks(app.Callbacks):
 
     """Callbacks for the new user interface"""
 
-    def trigger_button_states(self, *unused_arguments):
+    def update_buttons(self, *unused_arguments):
         """Trigger undo, apply and save button states changes"""
         if self.vars.undo_buffer:
             desired_undo_state = tkinter.NORMAL
         else:
             desired_undo_state = tkinter.DISABLED
         #
-        self.ui_instance.do_update_button('undo', desired_undo_state)
+        gui.set_state(self.widgets.buttons.undo, desired_undo_state)
         for button_name in ('apply', 'save'):
-            self.ui_instance.do_update_button(
-                button_name,
+            gui.set_state(
+                self.widgets.buttons[button_name],
                 self.tkvars.buttonstate[button_name].get())
         #
+
+    def update_selection(self, *unused_arguments):
+        """Trigger update after selection changed"""
+        if self.vars.trace:
+            self.vars.unapplied_changes = True
+            self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
+            self.tkvars.buttonstate.save.set(tkinter.NORMAL)
+        #
+        super().update_selection()
 
 
 class Panels(app.Panels):
@@ -280,13 +289,13 @@ class Panels(app.Panels):
         # TODO: replace by image related component
         heading = gui.Heading(
             parent_frame,
-            text=f'{frame_position} frame:',
+            text='Display:',
             sticky=tkinter.W,
             columnspan=4)
 
         # TODO
         def show_help(self=self):
-            return self.ui_instance.show_help('Selection')
+            return self.ui_instance.show_help('Display')
         #
         help_button = tkinter.Button(
             parent_frame,
@@ -294,40 +303,18 @@ class Panels(app.Panels):
             command=show_help)
         help_button.grid(
             row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
-        label = tkinter.Label(
-            parent_frame,
-            text='Number:')
-        # Destroy a pre-existing widget to remove variable limits set before
-        try:
-            self.widgets.frame_number.destroy()
-        except AttributeError:
-            pass
-        #
-        if change_enabled:
-            self.widgets.frame_number = tkinter.Spinbox(
-                parent_frame,
-                from_=self.vars.frame_limits.minimum,
-                to=self.vars.frame_limits.maximum,
-                textvariable=self.tkvars.current_frame_text,
-                state='readonly',
-                width=4)
-        else:
-            self.widgets.frame_number = tkinter.Label(
-                parent_frame,
-                textvariable=self.tkvars.current_frame_text)
-        #
-        label.grid(sticky=tkinter.W)
-        self.widgets.frame_number.grid(
-            sticky=tkinter.W, columnspan=3,
-            column=1, row=gui.grid_row_of(label))
-        if self.vars.vframe.display_ratio > 1:
+        if self.vars.image.display_ratio > 1:
             scale_factor = 'Size: scaled down (factor: %r)' % float(
-                self.vars.vframe.display_ratio)
+                self.vars.image.display_ratio)
         else:
             scale_factor = 'Size: original dimensions'
         #
         label = tkinter.Label(parent_frame, text=scale_factor)
         label.grid(sticky=tkinter.W, columnspan=4)
+
+    def select_area(self):
+        """Panel for the "Select area" phase"""
+        self.component_select_area()
 
 
 class NewUI(app.UserInterface):
@@ -338,40 +325,261 @@ class NewUI(app.UserInterface):
     phase_select_area = 'select_area'
     phases = (phase_open_file, phase_select_area)
 
-    callback_class = ImageCallbacks
-
     canvas_width = 900
     canvas_height = 640
 
     script_name = SCRIPT_NAME
     version = VERSION
 
+    def __init__(self, file_path):
+        """Set interface pugin classes and initialize super class"""
+        self.callback_class = ImageCallbacks
+        self.panel_class = Panels
+        super().__init__(file_path=file_path,
+                         script_path=SCRIPT_PATH,
+                         window_title=MAIN_WINDOW_TITLE)
+
+    def additional_variables(self):
+        """Subclass-specific post-initialization
+        (additional variables)
+        """
+        super().additional_variables()
+        open_support, save_support = pixelations.get_supported_extensions()
+        logging.debug('File formats open support: %r', open_support)
+        logging.debug('File formats save support: %r', save_support)
+        self.vars.update(
+            Namespace(
+                open_support=sorted(open_support),
+                save_support=sorted(save_support)))
+        self.tkvars.update(
+            Namespace(
+                buttonstate=Namespace(
+                    apply=self.callbacks.get_traced_stringvar(
+                        'update_buttons', value=tkinter.NORMAL),
+                    save=self.callbacks.get_traced_stringvar(
+                        'update_buttons', value=tkinter.NORMAL))))
+        #
+
+    def additional_widgets(self):
+        """Subclass-specific post-initialization
+        (additional widgets)
+        """
+        self.widgets.update(
+            Namespace(
+                buttons=Namespace(
+                    undo=None,
+                    apply=None,
+                    save=None)))
+        #
+
+    def apply_pixelation(self):
+        """Apply changes to the image"""
+        # Append the current state to the undo buffer
+        self.vars.undo_buffer.append(
+            (self.vars.image.original,
+             FrozenSelection(self.tkvars.selection),
+             self.vars.unapplied_changes))
+        if len(self.vars.undo_buffer) > UNDO_SIZE:
+            del self.vars.undo_buffer[:-UNDO_SIZE]
+        #
+        # Visual feedback
+        self.draw_indicator(stipple='gray75')
+        self.main_window.update_idletasks()
+        time.sleep(.2)
+        self.draw_indicator()
+        self.vars.image.set_original(self.vars.image.result)
+        self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
+        self.tkvars.buttonstate.save.set(tkinter.NORMAL)
+        self.callbacks.toggle_preview()
+        self.vars.unapplied_changes = False
+
+    def check_file_type(self, file_path):
+        """Return True if the file is a supported file,
+        False if not
+        """
+        if self.vars.open_support and \
+                file_path.suffix not in self.vars.open_support:
+            return False
+        #
+        return True
+
+    def __get_save_recommendation(self, ask_to_apply=False):
+        """Return True or False (depending on the necessity to
+        save the image)
+        """
+        try:
+            last_applied_selection = self.vars.undo_buffer[-1][1]
+        except IndexError:
+            logging.debug('No last applied selection!')
+        else:
+            current_selection = FrozenSelection(self.tkvars.selection)
+            logging.debug('Last applied selection: %s', last_applied_selection)
+            logging.debug('Current selection:      %s', current_selection)
+            logging.debug(
+                'Selections are equal: %r',
+                current_selection == last_applied_selection)
+        #
+        if self.vars.unapplied_changes:
+            if not ask_to_apply:
+                return True
+            #
+            if self.tkvars.show_preview.get():
+                default_answer = messagebox.YES
+            else:
+                default_answer = messagebox.NO
+            #
+            if messagebox.askyesno(
+                    'Not yet applied changes',
+                    'Pixelate the current selection before saving?',
+                    default=default_answer):
+                self.apply_pixelation()
+            #
+        #
+        return bool(self.vars.undo_buffer)
+
+    def load_file(self, file_path):
+        """Load the image"""
+        self.vars.image = pixelations.ImagePixelation(
+            file_path, canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+        # set selection sizes and reduce them
+        # to the image dimensions if necessary
+        (im_width, im_height) = self.vars.image.original.size
+        logging.debug(self.tkvars)
+        sel_width = self.tkvars.selection.width.get()
+        if not sel_width:
+            # Set initial selection width to 20% of image width
+            sel_width = max(
+                INITIAL_SELECTION_SIZE,
+                round(im_width / 5))
+        #
+        sel_height = self.tkvars.selection.height.get()
+        if not sel_height:
+            sel_height = sel_width
+        #
+        self.update_selection(
+            center_x=im_width // 2,
+            center_y=im_height // 2,
+            width=min(sel_width, im_width),
+            height=min(sel_height, im_height))
+        # set the shape
+        if not self.tkvars.selection.shape.get():
+            self.tkvars.selection.shape.set(OVAL)
+        #
+        # set tilesize
+        if not self.tkvars.selection.tilesize.get():
+            self.tkvars.selection.tilesize.set(
+                pixelations.DEFAULT_TILESIZE)
+        #
+        # set the show_preview variable by default
+        self.tkvars.show_preview.set(1)
+        # set the original path and displayed file name
+        self.vars.original_path = file_path
+        self.tkvars.file_name.set(file_path.name)
+        self.vars.unapplied_changes = False
+        self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
+        self.tkvars.buttonstate.save.set(tkinter.DISABLED)
+
+    def revert_last_pixelation(self):
+        """Revert to the state before doing the last apply"""
+        try:
+            last_state = self.vars.undo_buffer.pop()
+        except IndexError:
+            return
+        #
+        if not self.vars.undo_buffer:
+            gui.set_state(self.widgets.buttons.undo, tkinter.DISABLED)
+        #
+        (previous_image, previous_selection, unapplied_changes) = last_state
+        self.vars.image.set_original(previous_image)
+        self.vars.trace = False
+        previous_selection.restore_to(self.tkvars.selection)
+        self.vars.trace = True
+        self.pixelate_selection()
+        self.draw_indicator(stipple='error')
+        self.main_window.update_idletasks()
+        time.sleep(.2)
+        self.draw_indicator()
+        self.vars.unapplied_changes = unapplied_changes
+        self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
+
+    def save_file(self):
+        """Save as the selected file,
+        return True if the file was saved
+        """
+        if not self.__get_save_recommendation(ask_to_apply=True):
+            messagebox.showinfo(
+                'Image unchanged', 'Nothing to save.')
+            return False
+        #
+        original_suffix = self.vars.original_path.suffix
+        filetypes = [('Supported image files', f'*{suffix}') for suffix
+                     in self.vars.save_support] + [('All files', '*.*')]
+        selected_file = filedialog.asksaveasfilename(
+            initialdir=str(self.vars.original_path.parent),
+            defaultextension=original_suffix,
+            filetypes=filetypes,
+            parent=self.main_window,
+            title='Save pixelated image as…')
+        if not selected_file:
+            return False
+        #
+        logging.debug('Saving the file as %r', selected_file)
+        #  save the file and reset the "touched" flag
+        self.vars.image.original.save(selected_file)
+        self.vars.original_path = pathlib.Path(selected_file)
+        self.tkvars.file_name.set(self.vars.original_path.name)
+        self.vars.undo_buffer.clear()
+        self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
+        self.tkvars.buttonstate.save.set(tkinter.DISABLED)
+        self.vars.unapplied_changes = False
+        return True
+
     def show_additional_buttons(self, buttons_area, buttons_grid):
         """Additional buttons for the pixelate_image script"""
         self.widgets.buttons.undo = tkinter.Button(
             buttons_area,
             text='\u238c Undo',
-            command=self.do_undo)
+            command=self.revert_last_pixelation)
         self.widgets.buttons.undo.grid(row=0, column=0, **buttons_grid)
         self.widgets.buttons.apply = tkinter.Button(
             buttons_area,
             text='\u2713 Apply',
-            command=self.do_apply_changes)
+            command=self.apply_pixelation)
         self.widgets.buttons.apply.grid(row=0, column=1, **buttons_grid)
         try:
             self.widgets.buttons.save = tkinter.Button(
                 buttons_area,
                 text='\U0001f5ab Save',
-                command=self.do_save_file)
+                command=self.save_file)
         except tkinter.TclError:
             self.widgets.buttons.save = tkinter.Button(
                 buttons_area,
                 text='\u2386 Save',
-                command=self.do_save_file)
+                command=self.save_file)
         #
         self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
-        self.trigger_button_states()
+        self.callbacks.update_buttons()
         return 1
+
+
+
+# TODO
+
+
+
+
+# TODO
+
+
+
+
+# TODO
+
+
+
+
+# TODO
+
 
 
 
@@ -625,7 +833,7 @@ class UserInterface:
         #
         return False
 
-    def do_apply_changes(self):
+    def apply_pixelation(self):
         """Apply changes to the image"""
         # Append the current state to the undo buffer
         self.vars.undo_buffer.append(
@@ -985,7 +1193,7 @@ class UserInterface:
                     'Not yet applied changes',
                     'Pixelate the current selection before saving?',
                     default=default_answer):
-                self.do_apply_changes()
+                self.apply_changes()
             #
         #
         return bool(self.vars.undo_buffer)
@@ -1179,7 +1387,7 @@ class UserInterface:
         self.widgets.buttons.apply = tkinter.Button(
             buttons_area,
             text='\u2713 Apply',
-            command=self.do_apply_changes)
+            command=self.apply_changes)
         self.widgets.buttons.apply.grid(row=0, column=1, **buttons_grid)
         try:
             self.widgets.buttons.save = tkinter.Button(
@@ -1524,7 +1732,7 @@ def main(arguments):
     if selected_file and not selected_file.is_file():
         selected_file = None
     #
-    UserInterface(selected_file)
+    NewUI(selected_file)
 
 
 if __name__ == '__main__':
