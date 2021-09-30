@@ -480,7 +480,7 @@ class VideoCallbacks(app.Callbacks):
         #
 
     def update_buttons(self, *unused_arguments):
-        """Trigger undo, apply and save button states changes"""
+        """Trigger previous, next and save button states changes"""
         for (button_name, state_var) in self.tkvars.buttonstate.items():
             gui.set_state(self.widgets.buttons[button_name], state_var.get())
         #
@@ -657,7 +657,7 @@ class Panels(app.Panels):
             buttonframe,
             text='\u23ee Previous px start',
             command=self.ui_instance.jump_previous_px)
-        self.widgets.previewbuttons.next = tkinter.Button(
+        self.widgets.previewbuttons.next_ = tkinter.Button(
             buttonframe,
             text='\u23ef Next px start',
             command=self.ui_instance.jump_next_px)
@@ -668,7 +668,7 @@ class Panels(app.Panels):
             state=tkinter.DISABLED)     # Not yet implemented
         self.ui_instance.callbacks.update_previewbuttons()
         self.widgets.previewbuttons.previous.grid(row=0, column=0)
-        self.widgets.previewbuttons.next.grid(row=0, column=1)
+        self.widgets.previewbuttons.next_.grid(row=0, column=1)
         self.widgets.previewbuttons.play.grid(row=0, column=2)
         buttonframe.grid(sticky=tkinter.W)
         # Destroy a pre-existing widget to remove variable limits set before
@@ -1007,6 +1007,20 @@ class VideoUI(app.UserInterface):
 #         #
 #         self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
 # =============================================================================
+        # Set button states and defer state manipulations
+        self.vars.trace = False
+        if self.vars.current_panel == PREVIEW:
+            self.tkvars.buttonstate.next_.set(tkinter.DISABLED)
+            self.tkvars.buttonstate.more.set(tkinter.NORMAL)
+        else:
+            self.tkvars.buttonstate.more.set(tkinter.DISABLED)
+        #
+        if self.vars.current_panel == START_FRAME:
+            self.tkvars.buttonstate.previous.set(tkinter.DISABLED)
+        else:
+            self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
+        #
+        self.vars.trace = True
         self.callbacks.update_buttons()
         return 1
 
