@@ -82,10 +82,6 @@ except OSError as error:
     VERSION = '(Version file is missing: %s)' % error
 #
 
-HELP = dict(
-    selection='This is the selection of the area to be pixelated',
-)
-
 # Phases
 OPEN_FILE = 'open_file'
 START_FRAME = 'start_frame'
@@ -154,16 +150,12 @@ INDICATOR_OUTLINE_WIDTH = 2
 POSSIBLE_INDICATOR_COLORS = (
     'white', 'black', 'red', 'green', 'blue', 'cyan', 'yellow', 'magenta')
 
-UNDO_SIZE = 20
-
-HEADINGS_FONT = (None, 10, 'bold')
-
 FRAME_PATTERN = 'frame%04d.jpg'
 MAX_NB_FRAMES = 9999
 
 ONE_MILLION = 1000000
 
-# Items drawn on the canvas
+# FIXME: Items drawn on the canvas
 INDICATOR = 'indicator'
 NEW_SELECTION = 'new_selection'
 
@@ -302,46 +294,6 @@ class FramesCache:
         #
 
 
-class FrozenSelection:
-
-    """Store a selection state"""
-
-    variables = ('center_x', 'center_y', 'width', 'height',
-                 'shape', 'tilesize')
-
-    def __init__(self, selection):
-        """Initialize values from the variables in the
-        provided selection Namespace of tkinter variables
-        """
-        self.original_values = {key: selection[key].get()
-                                for key in self.variables}
-        self.effective_values = dict(self.original_values)
-        if self.effective_values['shape'] in QUADRATIC_SHAPES:
-            self.effective_values['height'] = self.effective_values['width']
-        #
-
-    def restore_to(self, px_image):
-        """Restore values to the variables in the
-        provided px_image Namespace of tkinter variables
-        """
-        for (key, value) in self.original_values.items():
-            px_image[key].set(value)
-        #
-
-    def __eq__(self, other):
-        """Return True if the effective values are equal"""
-        for (key, value) in self.effective_values.items():
-            if value != other.effective_values[key]:
-                return False
-            #
-        #
-        return True
-
-    def __str__(self,):
-        """Effective selection representation"""
-        return repr(tuple(self.effective_values.values()))
-
-
 class Actions(app.InterfacePlugin):
 
     """Pre-panel actions for the video GUI in sequential order"""
@@ -396,7 +348,7 @@ class Actions(app.InterfacePlugin):
         # set the show_preview variable by default
         self.tkvars.show_preview.set(1)
 
-    def action_end_frame(self):
+    def end_frame(self):
         """Actions before showing the end frame selection panel:
         Set frame range from the selected start frame
         to the last frame.
@@ -410,7 +362,7 @@ class Actions(app.InterfacePlugin):
         logging.debug('Fix start coordinates:')
         self.ui_instance.store_selection(self.vars.start_at)
 
-    def action_end_area(self):
+    def end_area(self):
         """Actions before showing the end area selection panel:
         Fix the selected frame as end frame.
         Load the frame for area selection
@@ -424,7 +376,7 @@ class Actions(app.InterfacePlugin):
             / self.vars.frame_file,
             canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
 
-    def action_preview(self):
+    def preview(self):
         """Actions before showing the preview panel:
         Fix the selected end coordinates
         Apply the pixelations to all images
@@ -586,7 +538,7 @@ class Panels(app.Panels):
             height=self.ui_instance.canvas_height)
         self.widgets.frame_canvas.grid()
         self.vars.trace = True
-        self.ui_instance.callbacks.trigger_change_frame()
+        self.ui_instance.callbacks.change_frame()
         image_frame.grid(row=0, column=0, rowspan=3, **app.GRID_FULLWIDTH)
         self.sidebar_frameselection(position)
         # logging.debug(
@@ -597,7 +549,6 @@ class Panels(app.Panels):
                              frame_position,
                              change_enabled=False):
         """Show information about the current video frame"""
-        # TODO: replace by image related component
         heading = gui.Heading(
             parent_frame,
             text=f'{frame_position} frame:',
@@ -805,7 +756,8 @@ class Rollbacks(app.InterfacePlugin):
         Set the seclection to the selected end coordinates
         Cleanup the modified_frames tempdir
         """
-        self.ui_instance.adjust_frame_limits(minimum=self.vars.start_at.frame + 1)
+        self.ui_instance.adjust_frame_limits(
+            minimum=self.vars.start_at.frame + 1)
         self.vars.trace = False
         current_frame = self.vars.end_at.frame
         self.ui_instance.adjust_current_frame(current_frame)
@@ -822,9 +774,9 @@ class Rollbacks(app.InterfacePlugin):
         self.vars.modified_frames.cleanup()
 
 
-class NewUI(app.UserInterface):
+class VideoUI(app.UserInterface):
 
-    """New user interface"""
+    """Modular user interface for video pixelation"""
 
     phases = PHASES
 
@@ -835,14 +787,14 @@ class NewUI(app.UserInterface):
     version = VERSION
 
     def __init__(self, file_path, options):
-        """Set options and ininitialize super class"""
-        self.options = options
+        """Initialize super class"""
         self.action_class = Actions
         self.callback_class = VideoCallbacks
         self.panel_class = Panels
         self.rollback_class = Rollbacks
-        super().__init__(file_path=file_path,
-                         script_path=SCRIPT_PATH,
+        super().__init__(file_path,
+                         options,
+                         SCRIPT_PATH,
                          window_title=MAIN_WINDOW_TITLE)
 
     def additional_variables(self):
@@ -851,7 +803,7 @@ class NewUI(app.UserInterface):
         """
         super().additional_variables()
         self.vars.update(
-            Namespace(
+            app.Namespace(
                 original_frames=None,
                 modified_frames=None,
                 nb_frames=None,
@@ -862,19 +814,22 @@ class NewUI(app.UserInterface):
                 opxsf=[],
                 spxsf=[],
                 frame_rate=None,
+                frames_cache=None,
                 duration_usec=None,
                 unsaved_changes=False,
-                frame_limits=Namespace(
+                frame_limits=app.Namespace(
                     minimum=1,
                     maximum=1),
-                start_at=Namespace(**EMPTY_SELECTION),
-                end_at=Namespace(**EMPTY_SELECTION)))
+                start_at=app.Namespace(**EMPTY_SELECTION),
+                end_at=app.Namespace(**EMPTY_SELECTION)))
         self.tkvars.update(
-            Namespace(
-                current_frame=tkinter.IntVar(),
-                current_frame_text=tkinter.StringVar(),
+            app.Namespace(
+                current_frame=self.callbacks.get_traced_intvar(
+                    'change_frame'),
+                current_frame_text=self.callbacks.get_traced_stringvar(
+                    'change_frame_from_text'),
                 end_frame=tkinter.IntVar(),
-                buttonstate=Namespace(
+                buttonstate=app.Namespace(
                     previous=self.callbacks.get_traced_stringvar(
                         'update_buttons', value=tkinter.DISABLED),
                     next_=self.callbacks.get_traced_stringvar(
@@ -888,12 +843,12 @@ class NewUI(app.UserInterface):
         (additional widgets)
         """
         self.widgets.update(
-            Namespace(
-                buttons=Namespace(
+            app.Namespace(
+                buttons=app.Namespace(
                     previous=None,
                     next_=None,
                     more=None),
-                previewbuttons=Namespace(
+                previewbuttons=app.Namespace(
                     previous=None,
                     next_=None,
                     play=None),
@@ -1014,8 +969,8 @@ class NewUI(app.UserInterface):
             progress.action_cancel()
         #
         # Clear selection
-        self.vars.start_at = Namespace(**EMPTY_SELECTION)
-        self.vars.end_at = Namespace(**EMPTY_SELECTION)
+        self.vars.start_at = app.Namespace(**EMPTY_SELECTION)
+        self.vars.end_at = app.Namespace(**EMPTY_SELECTION)
         # set the original path and displayed file name
         self.vars.original_path = file_path
         self.tkvars.file_name.set(file_path.name)
@@ -1043,12 +998,12 @@ class NewUI(app.UserInterface):
 #             self.widgets.buttons.save = tkinter.Button(
 #                 buttons_area,
 #                 text='\U0001f5ab Save',
-#                 command=self.do_save_file)
+#                 command=self.save_file)
 #         except tkinter.TclError:
 #             self.widgets.buttons.save = tkinter.Button(
 #                 buttons_area,
 #                 text='\u2386 Save',
-#                 command=self.do_save_file)
+#                 command=self.save_file)
 #         #
 #         self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
 # =============================================================================
@@ -1188,6 +1143,31 @@ class NewUI(app.UserInterface):
         """Play current video as a flipbook"""
         raise NotImplementedError
 
+    def pre_quit_check(self,):
+        """Checks and actions before exiting the application"""
+        if self.vars.unsaved_changes:
+            if messagebox.askyesno('Unsaved Changes', 'Save your changes?'):
+                if not self.save_file():
+                    if not messagebox.askokcancel(
+                            'Changes not saved!',
+                            'Really exit without saving?',
+                            default=messagebox.CANCEL):
+                        return False
+                    #
+                #
+            #
+        #
+        for tempdir in (self.vars.original_frames,
+                        self.vars.modified_frames):
+            try:
+                tempdir.cleanup()
+                logging.info('Deleted temporary directory %s', tempdir.name)
+            except AttributeError:
+                pass
+            #
+        #
+        return True
+
     def save_file(self):
         """Save as the selected file,
         return True if the file was saved
@@ -1244,26 +1224,6 @@ class NewUI(app.UserInterface):
         #
         self.vars.unsaved_changes = False
         return True
-
-
-
-# TODO
-
-
-
-
-# TODO
-
-
-
-
-# TODO
-
-
-
-
-# TODO
-
 
 
 class UserInterface:
@@ -1667,6 +1627,19 @@ class UserInterface:
             #
         #
         return False
+
+    def complete_modified_directory(self):
+        """Fill up modified directory from souce directory"""
+        original_path = pathlib.Path(self.vars.original_frames.name)
+        target_path = pathlib.Path(self.vars.modified_frames.name)
+        for frame_number in range(1, self.vars.nb_frames + 1):
+            frame_file = FRAME_PATTERN % frame_number
+            frame_target_path = target_path / frame_file
+            if not frame_target_path.exists():
+                frame_source_path = original_path / frame_file
+                frame_source_path.rename(frame_target_path)
+            #
+        #
 
     def __do_adjust_current_frame(self, new_current_frame):
         """Adjust current frame without calling triggers"""
@@ -2491,13 +2464,7 @@ class UserInterface:
 
     def __show_help(self, topic='Global'):
         """Show help for the provided topic"""
-        try:
-            info_sequence = list(HELP[topic].items())
-        except AttributeError:
-            # Not a hash
-            info_sequence = [(f'{topic} help:', HELP[topic])]
-        except KeyError:
-            info_sequence = [('Error:', f'No help for {topic} available yet')]
+        info_sequence = [('Error:', f'No help for {topic} available yet')]
         #
         gui.InfoDialog(
             self.main_window,
@@ -3010,7 +2977,7 @@ def main(arguments):
     if selected_file and not selected_file.is_file():
         selected_file = None
     #
-    UserInterface(selected_file, arguments)
+    VideoUI(selected_file, arguments)
 
 
 if __name__ == '__main__':

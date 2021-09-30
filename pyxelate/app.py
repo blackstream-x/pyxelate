@@ -40,34 +40,6 @@ from pyxelate import gui
 #
 
 
-#WINDOW_TITLE = 'pyxelate: ???'
-
-# =============================================================================
-# with open(SCRIPT_PATH.parent /
-#           'docs' /
-#           f'{SCRIPT_PATH.stem}_help.json') as help_file:
-#     HELP = json.load(help_file)
-# #
-# =============================================================================
-
-# =============================================================================
-# # Phases
-# CHOOSE_IMAGE = 'choose_image'
-# SELECT_AREA = 'select_area'
-#
-# PHASES = (
-#     CHOOSE_IMAGE,
-#     SELECT_AREA)
-#
-# PANEL_NAMES = {
-#     SELECT_AREA: 'Select area to be pixelated'}
-# =============================================================================
-
-# =============================================================================
-# CANVAS_WIDTH = 900
-# CANVAS_HEIGHT = 640
-# =============================================================================
-
 ELLIPSE = 'ellipse'
 RECTANGLE = 'rectangle'
 
@@ -100,18 +72,11 @@ INDICATOR_OUTLINE_WIDTH = 2
 POSSIBLE_INDICATOR_COLORS = (
     'white', 'black', 'red', 'green', 'blue', 'cyan', 'yellow', 'magenta')
 
-# =============================================================================
-# UNDO_SIZE = 20
-# =============================================================================
-
-# =============================================================================
-# HEADINGS_FONT = (None, 10, 'bold')
-# =============================================================================
-
 # Items drawn on the canvas
 INDICATOR = 'indicator'
 NEW_SELECTION = 'new_selection'
 
+# Grid parameters
 WITH_BORDER = dict(
     borderwidth=2,
     padx=5,
@@ -121,11 +86,6 @@ GRID_FULLWIDTH = dict(
     padx=4,
     pady=2,
     sticky=tkinter.E + tkinter.W)
-
-
-#
-# Helper Functions
-#
 
 
 #
@@ -223,7 +183,6 @@ class FrozenSelection:
     def __str__(self,):
         """Effective selection representation"""
         return repr(tuple(self.effective_values.values()))
-
 
 
 class InterfacePlugin:
@@ -450,10 +409,14 @@ class Callbacks(InterfacePlugin):
     def toggle_preview(self, *unused_arguments):
         """Trigger preview update"""
         try:
-            self.ui_instance.do_show_image()
+            self.ui_instance.show_image()
         except AttributeError as error:
             logging.warning('%s', error)
         #
+
+    def update_buttons(self, *unused_arguments):
+        """Trigger button state updates in subclasses"""
+        raise NotImplementedError
 
     def update_selection(self, *unused_arguments):
         """Trigger update after selection changed"""
@@ -461,7 +424,7 @@ class Callbacks(InterfacePlugin):
             self.ui_instance.pixelate_selection()
             self.ui_instance.draw_indicator()
         #
-        self.ui_instance.do_toggle_height()
+        self.ui_instance.toggle_height()
 
 
 class Panels(InterfacePlugin):
@@ -781,9 +744,11 @@ class UserInterface:
 
     def __init__(self,
                  file_path,
+                 options,
                  script_path,
                  window_title='Base UI'):
         """Build the GUI"""
+        self.options = options
         self.main_window = tkinter.Tk()
         self.main_window.title(f'pyxelate: {window_title}')
         self.vars = Namespace(
@@ -1225,12 +1190,6 @@ class UserInterface:
             self.tkvars.selection[key].set(value)
         #
         self.vars.trace = True
-
-
-#
-# Functions
-#
-
 
 
 # vim: fileencoding=utf-8 ts=4 sts=4 sw=4 autoindent expandtab syntax=python:
