@@ -56,7 +56,11 @@ def reconfigure_widget(widget, **kwargs):
     if not widget:
         return
     #
-    widget.config(**kwargs)
+    try:
+        widget.config(**kwargs)
+    except tkinter.TclError:
+        pass
+    #
 
 
 def set_state(widget, new_state):

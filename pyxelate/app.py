@@ -437,23 +437,8 @@ class Panels(InterfacePlugin):
                                  fixed_tilesize=False,
                                  allowed_shapes=ALL_SHAPES):
         """Show the shape part of the settings frame"""
-        heading = gui.Heading(
-            settings_frame,
-            text='Selection:',
-            sticky=tkinter.W,
-            columnspan=4)
-
-        # Inner function for the "extra arguments" trick, see
-        # <https://tkdocs.com/shipman/extra-args.html>
-        def show_help(self=self):
-            return self.ui_instance.show_help('Selection')
-        #
-        help_button = tkinter.Button(
-            settings_frame,
-            text='\u2753',
-            command=show_help)
-        help_button.grid(
-            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
+        self.ui_instance.heading_with_help_button(
+            settings_frame, 'Selection')
         label = tkinter.Label(
             settings_frame,
             text='Tile size:')
@@ -563,23 +548,8 @@ class Panels(InterfacePlugin):
 
     def component_file_info(self, parent_frame):
         """Show information about the current file"""
-        heading = gui.Heading(
-            parent_frame,
-            text='Original file:',
-            sticky=tkinter.W,
-            columnspan=4)
-
-        # Inner function for the "extra arguments" trick, see
-        # <https://tkdocs.com/shipman/extra-args.html>
-        def show_help(self=self):
-            return self.ui_instance.show_help('Original file')
-        #
-        help_button = tkinter.Button(
-            parent_frame,
-            text='\u2753',
-            command=show_help)
-        help_button.grid(
-            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
+        self.ui_instance.heading_with_help_button(
+            parent_frame, 'Original file')
         label = tkinter.Label(
             parent_frame,
             textvariable=self.tkvars.file_name)
@@ -610,8 +580,8 @@ class Panels(InterfacePlugin):
             **WITH_BORDER)
         self.widgets.canvas = tkinter.Canvas(
             image_frame,
-            width=self.ui_instance.canvas_width,
-            height=self.ui_instance.canvas_height)
+            width=self.vars.canvas_width,
+            height=self.vars.canvas_height)
         self.vars.tk_image = self.vars.image.tk_original
         self.widgets.canvas.create_image(
             0, 0,
@@ -639,12 +609,6 @@ class Panels(InterfacePlugin):
             fixed_tilesize=fixed_tilesize,
             allowed_shapes=allowed_shapes)
 
-# =============================================================================
-#     def select_area(self): -> pixelate_image.py
-#         """Panel for the "Select area" phase"""
-#         self.component_select_area()
-# =============================================================================
-
     def sidebar_settings(self,
                          frame_position,
                          change_enabled=False,
@@ -663,23 +627,8 @@ class Panels(InterfacePlugin):
             settings_frame,
             fixed_tilesize=fixed_tilesize,
             allowed_shapes=allowed_shapes)
-        heading = gui.Heading(
-            settings_frame,
-            text='Indicator colours:',
-            sticky=tkinter.W,
-            columnspan=4)
-
-        # Inner function for the "extra arguments" trick, see
-        # <https://tkdocs.com/shipman/extra-args.html>
-        def show_help(self=self):
-            return self.ui_instance.show_help('Indicator colours')
-        #
-        help_button = tkinter.Button(
-            settings_frame,
-            text='\u2753',
-            command=show_help)
-        help_button.grid(
-            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
+        self.ui_instance.heading_with_help_button(
+            settings_frame, 'Indicator colours')
         label = tkinter.Label(
             settings_frame,
             text='Current:')
@@ -720,9 +669,6 @@ class UserInterface:
     panel_class = Panels
     rollback_class = InterfacePlugin
 
-    canvas_width = 900
-    canvas_height = 640
-
     script_name = '<module pyxelate.app>'
     version = '<version>'
     homepage = 'https://github.com/blackstream-x/pyxelate'
@@ -746,6 +692,8 @@ class UserInterface:
                  file_path,
                  options,
                  script_path,
+                 canvas_width=900,
+                 canvas_height=640,
                  window_title='Base UI'):
         """Build the GUI"""
         self.options = options
@@ -754,6 +702,8 @@ class UserInterface:
         self.vars = Namespace(
             current_panel=None,
             errors=[],
+            canvas_width=canvas_width,
+            canvas_height=canvas_height,
             tk_image=None,
             image=None,
             original_path=file_path,
@@ -903,6 +853,32 @@ class UserInterface:
         False if not
         """
         raise NotImplementedError
+
+    def heading_with_help_button(self,
+                                 parent_frame,
+                                 subject,
+                                 heading_column_span=4):
+        """A heading with an adjacent help button"""
+        heading = gui.Heading(
+            parent_frame,
+            text=f'{subject}:',
+            sticky=tkinter.W,
+            columnspan=heading_column_span)
+
+        # Inner function for the "extra arguments" trick, see
+        # <https://tkdocs.com/shipman/extra-args.html>
+        def show_help(self=self):
+            return self.show_help(topic=subject)
+        #
+        help_button = tkinter.Button(
+            parent_frame,
+            # text='\u2753',
+            text='?',
+            command=show_help)
+        help_button.grid(
+            row=gui.grid_row_of(heading),
+            column=heading_column_span + 1,
+            sticky=tkinter.E)
 
     def load_file(self, file_path):
         """Load the file"""
@@ -1125,7 +1101,7 @@ class UserInterface:
         "About" and "Quit" buttons at the bottom
         """
         try:
-            self.widgets.action_area.grid_forget()
+            self.widgets.action_area.destroy()
         except AttributeError:
             pass
         #
@@ -1144,6 +1120,7 @@ class UserInterface:
             self.vars.current_panel = self.vars.current_phase
         #
         self.__show_errors()
+        logging.debug('Showing panel %r', self.vars.current_panel)
         panel_method()
         self.widgets.action_area.grid(**GRID_FULLWIDTH)
         #

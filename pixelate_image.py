@@ -24,7 +24,6 @@ See the LICENSE file for more details.
 
 
 import argparse
-import json
 import logging
 import os
 import pathlib
@@ -77,65 +76,22 @@ except OSError as error:
     VERSION = '(Version file is missing: %s)' % error
 #
 
-with open(SCRIPT_PATH.parent /
-          'docs' /
-          f'{SCRIPT_PATH.stem}_help.json') as help_file:
-    HELP = json.load(help_file)
-#
-
 # Phases
-CHOOSE_IMAGE = 'choose_image'
+OPEN_FILE = 'open_file'
 SELECT_AREA = 'select_area'
 
 PHASES = (
-    CHOOSE_IMAGE,
+    OPEN_FILE,
     SELECT_AREA)
 
 PANEL_NAMES = {
     SELECT_AREA: 'Select area to be pixelated'}
 
-CANVAS_WIDTH = 900
-CANVAS_HEIGHT = 640
-
-ELLIPSE = 'ellipse'
-RECTANGLE = 'rectangle'
-
-OVAL = '\u2b2d ellipse'
-CIRCLE = '\u25cb circle'
-RECT = '\u25ad rectangle'
-SQUARE = '\u25a1 square'
-
-SHAPES = {
-    OVAL: ELLIPSE,
-    CIRCLE: ELLIPSE,
-    RECT: RECTANGLE,
-    SQUARE: RECTANGLE,
-}
-
-ELLIPTIC_SHAPES = (OVAL, CIRCLE)
-RECTANGULAR_SHAPES = (RECT, SQUARE)
-QUADRATIC_SHAPES = (CIRCLE, SQUARE)
-ALL_SHAPES = ELLIPTIC_SHAPES + RECTANGULAR_SHAPES
-
-MINIMUM_TILESIZE = 10
-MAXIMUM_TILESIZE = 200
-TILESIZE_INCREMENT = 5
-
-MINIMUM_SELECTION_SIZE = 20
-INITIAL_SELECTION_SIZE = 50
-
-INDICATOR_OUTLINE_WIDTH = 2
-
-POSSIBLE_INDICATOR_COLORS = (
-    'white', 'black', 'red', 'green', 'blue', 'cyan', 'yellow', 'magenta')
 
 UNDO_SIZE = 20
 
-HEADINGS_FONT = (None, 10, 'bold')
-
-# Items drawn on the canvas
-INDICATOR = 'indicator'
-NEW_SELECTION = 'new_selection'
+CANVAS_WIDTH = 900,
+CANVAS_HEIGHT = 640,
 
 
 #
@@ -177,7 +133,7 @@ class FrozenSelection:
         self.original_values = {key: selection[key].get()
                                 for key in self.variables}
         self.effective_values = dict(self.original_values)
-        if self.effective_values['shape'] in QUADRATIC_SHAPES:
+        if self.effective_values['shape'] in app.QUADRATIC_SHAPES:
             self.effective_values['height'] = self.effective_values['width']
         #
 
@@ -240,23 +196,8 @@ class Panels(app.Panels):
                              frame_position,
                              change_enabled=False):
         """Show information about the current video frame"""
-        heading = gui.Heading(
-            parent_frame,
-            text='Display:',
-            sticky=tkinter.W,
-            columnspan=4)
-
-        # Inner function for the "extra arguments" trick, see
-        # <https://tkdocs.com/shipman/extra-args.html>
-        def show_help(self=self):
-            return self.ui_instance.show_help('Display')
-        #
-        help_button = tkinter.Button(
-            parent_frame,
-            text='\u2753',
-            command=show_help)
-        help_button.grid(
-            row=gui.grid_row_of(heading), column=5, sticky=tkinter.E)
+        self.ui_instance.heading_with_help_button(
+            parent_frame, 'Display')
         if self.vars.image.display_ratio > 1:
             scale_factor = 'Size: scaled down (factor: %r)' % float(
                 self.vars.image.display_ratio)
@@ -275,13 +216,7 @@ class ImageUI(app.UserInterface):
 
     """Modular user interface for image pixelation"""
 
-    phase_open_file = 'open_file'
-    phase_select_area = 'select_area'
-    phases = (phase_open_file, phase_select_area)
-
-    canvas_width = 900
-    canvas_height = 640
-
+    phases = PHASES
     script_name = SCRIPT_NAME
     version = VERSION
 
@@ -292,6 +227,8 @@ class ImageUI(app.UserInterface):
         super().__init__(file_path,
                          options,
                          SCRIPT_PATH,
+                         canvas_width=CANVAS_WIDTH,
+                         canvas_height=CANVAS_HEIGHT,
                          window_title=MAIN_WINDOW_TITLE)
 
     def additional_variables(self):
@@ -395,7 +332,8 @@ class ImageUI(app.UserInterface):
     def load_file(self, file_path):
         """Load the image"""
         self.vars.image = pixelations.ImagePixelation(
-            file_path, canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT))
+            file_path,
+            canvas_size=(self.vars.canvas_width, self.vars.canvas_height))
         # set selection sizes and reduce them
         # to the image dimensions if necessary
         (im_width, im_height) = self.vars.image.original.size
@@ -404,7 +342,7 @@ class ImageUI(app.UserInterface):
         if not sel_width:
             # Set initial selection width to 20% of image width
             sel_width = max(
-                INITIAL_SELECTION_SIZE,
+                app.INITIAL_SELECTION_SIZE,
                 round(im_width / 5))
         #
         sel_height = self.tkvars.selection.height.get()
@@ -418,7 +356,7 @@ class ImageUI(app.UserInterface):
             height=min(sel_height, im_height))
         # set the shape
         if not self.tkvars.selection.shape.get():
-            self.tkvars.selection.shape.set(OVAL)
+            self.tkvars.selection.shape.set(app.OVAL)
         #
         # set tilesize
         if not self.tkvars.selection.tilesize.get():
