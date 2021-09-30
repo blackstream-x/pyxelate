@@ -4,10 +4,27 @@
   },
   "Original file": {
     "The first line": "shows the name of the current video file",
-    "The button": "allows loading another video file"
+    "Choose another file": "When you click this button, you can load another video file.\n"
   },
-  "Display": {
+  "Current frame": {
+    "Number": "The number of the currently displayed frame",
     "Size": "shows the scaling factor of the loaded frame"
+  },
+  "End frame": {
+    "Number": "The number of the current pixelation end frame",
+    "Size": "shows the scaling factor of the loaded frame"
+  },
+  "Start frame": {
+    "Number": "The number of the current pixelation start frame",
+    "Size": "shows the scaling factor of the loaded frame"
+  },
+  "More pixelations": {
+    "Add another pixelation": "When you click this button, the wizard goes back to the\nfirst panel (Select pixelation start frame) so you can\nadd another pixelation in addition to the one that has\njust been applied.\n"
+  },
+  "Export settings": {
+    "Audio": "Include audio stream from the original video if selected",
+    "CRF": "Constant Rate Factor for ffmpeg (0-51).\nHigher values produce smaller files, but lower quality.\nAccording to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),\na value between 17 and 28 is recommended.\nDefault is 18, producing nearly visually lossless output.\n",
+    "Preset": "Ffmpeg preset. Slower presets provide better compression. According to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264), the slowest preset you have pationce for is recommended. Default is 'slow'."
   },
   "Selection": {
     "Selection": "Drag the selection around, or create a new one by dragging\noutside of the selection indicator.\nFine-tune selection size and position using the controls\ndescribed below.\nWhen clicking the \u201c\u25b7 Next\u201d Button, the current selection\nwill be set as start (or end) of the pixelation.\n",

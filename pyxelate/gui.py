@@ -35,13 +35,61 @@ GRID_KEYWORDS = ('column', 'columnspan', 'in_', 'ipadx', 'ipady',
 
 
 #
+# Helper functions
 #
-#
+
+
+def get_widget_state(widget):
+    """Get a widget state"""
+    return widget.cget('state')
 
 
 def grid_row_of(widget):
     """Return the grid row of the widget"""
     return widget.grid_info()['row']
+
+
+def reconfigure_widget(widget, **kwargs):
+    """Reconfigure a widget, avoiding eceptions
+    for nonexisting widgets
+    """
+    if not widget:
+        return
+    #
+    try:
+        widget.config(**kwargs)
+    except tkinter.TclError:
+        pass
+    #
+
+
+def set_state(widget, new_state):
+    """Update a widget state if required"""
+    try:
+        old_state = get_widget_state(widget)
+    except AttributeError:
+        return
+    #
+    if old_state == new_state:
+        return
+    #
+    reconfigure_widget(widget, state=new_state)
+
+
+def traced_variable(callback,
+                    constructor=tkinter.StringVar,
+                    mode='write',
+                    value=None):
+    """Return a traced tkinter variable
+    where the callback is called on trigger.
+    If a value is provided, the variable is initialized with it.
+    """
+    tkvar = constructor()
+    if value is not None:
+        tkvar.set(value)
+    #
+    tkvar.trace_add(mode, callback)
+    return tkvar
 
 
 #

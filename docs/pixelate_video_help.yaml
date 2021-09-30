@@ -14,10 +14,41 @@ Global:
 
 Original file:
   The first line: shows the name of the current video file
-  The button: allows loading another video file
+  Choose another file: |
+    When you click this button, you can load another video file.
 
-Display:
+Current frame:
+  Number: The number of the currently displayed frame
   Size: shows the scaling factor of the loaded frame
+
+End frame:
+  Number: The number of the current pixelation end frame
+  Size: shows the scaling factor of the loaded frame
+
+Start frame:
+  Number: The number of the current pixelation start frame
+  Size: shows the scaling factor of the loaded frame
+
+More pixelations:
+  Add another pixelation: |
+    When you click this button, the wizard goes back to the
+    first panel (Select pixelation start frame) so you can
+    add another pixelation in addition to the one that has
+    just been applied.
+
+Export settings:
+  Audio: Include audio stream from the original video if selected
+  CRF: |
+    Constant Rate Factor for ffmpeg (0-51).
+    Higher values produce smaller files, but lower quality.
+    According to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),
+    a value between 17 and 28 is recommended.
+    Default is 18, producing nearly visually lossless output.
+  Preset: |
+    FFmpeg preset. Slower presets provide better compression.
+    According to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),
+    the slowest preset you have pationce for is recommended.
+    Default is 'slow'.
 
 Selection:
   Selection: |
@@ -34,7 +65,6 @@ Selection:
   Width and Height: |
     Fine-tune selection width and height here.
     For “quadratic” shapes (i.e. square and circle), the height will
-
     follow the width. Minimum is 20 pixels in each dimension.
   "Center at x/y": Fine-tune the selection center here.
   Preview: |
