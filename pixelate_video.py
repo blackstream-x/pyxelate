@@ -433,7 +433,6 @@ class VideoCallbacks(app.Callbacks):
         self.vars.trace = True
         if self.vars.current_panel == PREVIEW:
             self.vars.tk_image = self.vars.frames_cache.pop(current_frame)
-            # self.update_previewbuttons()
         else:
             self.vars.frame_file = FRAME_PATTERN % current_frame
             self.vars.vframe = pixelations.BaseImage(
@@ -463,24 +462,6 @@ class VideoCallbacks(app.Callbacks):
         for (button_name, state_var) in self.tkvars.buttonstate.items():
             gui.set_state(self.widgets.buttons[button_name], state_var.get())
         #
-
-# =============================================================================
-#     def update_previewbuttons(self):
-#         """Update button states if required"""
-#         current_frame = self.tkvars.current_frame.get()
-#         if any(frameno < current_frame for frameno in self.vars.spxsf):
-#             previous_state = tkinter.NORMAL
-#         else:
-#             previous_state = tkinter.DISABLED
-#         #
-#         if any(frameno > current_frame for frameno in self.vars.spxsf):
-#             next_state = tkinter.NORMAL
-#         else:
-#             next_state = tkinter.DISABLED
-#         #
-#         gui.set_state(self.widgets.previewbuttons.previous, previous_state)
-#         gui.set_state(self.widgets.previewbuttons.next_, next_state)
-# =============================================================================
 
 
 class Panels(app.Panels):
@@ -849,10 +830,6 @@ class VideoUI(app.UserInterface):
                     previous=None,
                     next_=None,
                     more=None),
-                previewbuttons=app.Namespace(
-                    previous=None,
-                    next_=None,
-                    play=None),
                 frame_canvas=None,
                 frames_slider=None,
                 frame_number=None))
