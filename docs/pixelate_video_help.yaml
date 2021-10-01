@@ -40,14 +40,14 @@ Export settings:
   Audio: Include audio stream from the original video if selected
   CRF: |
     Constant Rate Factor for ffmpeg (0-51).
-    Higher values produce smaller files, but lower quality.
+    Higher values produce smaller files at the cost of lower quality.
     According to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),
     a value between 17 and 28 is recommended.
     Default is 18, producing nearly visually lossless output.
   Preset: |
     FFmpeg preset. Slower presets provide better compression.
     According to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),
-    the slowest preset you have pationce for is recommended.
+    the slowest preset you have patience for is recommended.
     Default is 'slow'.
 
 Selection:

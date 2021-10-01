@@ -433,7 +433,7 @@ class VideoCallbacks(app.Callbacks):
         self.vars.trace = True
         if self.vars.current_panel == PREVIEW:
             self.vars.tk_image = self.vars.frames_cache.pop(current_frame)
-            self.update_previewbuttons()
+            # self.update_previewbuttons()
         else:
             self.vars.frame_file = FRAME_PATTERN % current_frame
             self.vars.vframe = pixelations.BaseImage(
@@ -464,21 +464,23 @@ class VideoCallbacks(app.Callbacks):
             gui.set_state(self.widgets.buttons[button_name], state_var.get())
         #
 
-    def update_previewbuttons(self):
-        """Update button states if required"""
-        current_frame = self.tkvars.current_frame.get()
-        if any(frameno < current_frame for frameno in self.vars.spxsf):
-            previous_state = tkinter.NORMAL
-        else:
-            previous_state = tkinter.DISABLED
-        #
-        if any(frameno > current_frame for frameno in self.vars.spxsf):
-            next_state = tkinter.NORMAL
-        else:
-            next_state = tkinter.DISABLED
-        #
-        gui.set_state(self.widgets.previewbuttons.previous, previous_state)
-        gui.set_state(self.widgets.previewbuttons.next_, next_state)
+# =============================================================================
+#     def update_previewbuttons(self):
+#         """Update button states if required"""
+#         current_frame = self.tkvars.current_frame.get()
+#         if any(frameno < current_frame for frameno in self.vars.spxsf):
+#             previous_state = tkinter.NORMAL
+#         else:
+#             previous_state = tkinter.DISABLED
+#         #
+#         if any(frameno > current_frame for frameno in self.vars.spxsf):
+#             next_state = tkinter.NORMAL
+#         else:
+#             next_state = tkinter.DISABLED
+#         #
+#         gui.set_state(self.widgets.previewbuttons.previous, previous_state)
+#         gui.set_state(self.widgets.previewbuttons.next_, next_state)
+# =============================================================================
 
 
 class Panels(app.Panels):
@@ -691,25 +693,6 @@ class Panels(app.Panels):
         image_frame = tkinter.Frame(
             self.widgets.action_area,
             **app.WITH_BORDER)
-        buttonframe = tkinter.Frame(image_frame)
-        self.widgets.previewbuttons.previous = tkinter.Button(
-            buttonframe,
-            text='\u23ee Previous px start',
-            command=self.ui_instance.jump_previous_px)
-        self.widgets.previewbuttons.next_ = tkinter.Button(
-            buttonframe,
-            text='\u23ef Next px start',
-            command=self.ui_instance.jump_next_px)
-        self.widgets.previewbuttons.play = tkinter.Button(
-            buttonframe,
-            text='\u23f5 Play 2 seconds',
-            command=self.ui_instance.play_flipbook,
-            state=tkinter.DISABLED)     # Not yet implemented
-        self.ui_instance.callbacks.update_previewbuttons()
-        self.widgets.previewbuttons.previous.grid(row=0, column=0)
-        self.widgets.previewbuttons.next_.grid(row=0, column=1)
-        self.widgets.previewbuttons.play.grid(row=0, column=2)
-        buttonframe.grid(sticky=tkinter.W)
         self.component_frames_slider(image_frame, 'Current')
         image_frame.grid(row=0, column=0, rowspan=3, **app.GRID_FULLWIDTH)
         sidebar_frame = tkinter.Frame(
@@ -1297,7 +1280,8 @@ def __get_arguments():
 def main(arguments):
     """Main script function"""
     logging.basicConfig(
-        format='%(levelname)-8s\u2551 %(funcName)s → %(message)s',
+        format='%(levelname)-8s\u2551 %(funcName)s @ L%(lineno)s'
+        ' → %(message)s',
         level=arguments.loglevel)
     selected_file = arguments.image_file
     if selected_file and not selected_file.is_file():
