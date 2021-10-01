@@ -508,8 +508,8 @@ class Panels(InterfacePlugin):
             text='Center at x:')
         center_x = tkinter.Spinbox(
             settings_frame,
-            from_=0,
-            to=self.vars.image.original.width,
+            from_=-self.vars.image.original.width,
+            to=2 * self.vars.image.original.width,
             justify=tkinter.RIGHT,
             width=4,
             textvariable=self.tkvars.selection.center_x)
@@ -518,8 +518,8 @@ class Panels(InterfacePlugin):
             text=', y:')
         center_y = tkinter.Spinbox(
             settings_frame,
-            from_=0,
-            to=self.vars.image.original.height,
+            from_=-self.vars.image.original.height,
+            to=2 * self.vars.image.original.height,
             justify=tkinter.RIGHT,
             width=4,
             textvariable=self.tkvars.selection.center_y)
