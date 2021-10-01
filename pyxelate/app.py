@@ -279,6 +279,7 @@ class Callbacks(InterfacePlugin):
         self.ui_instance.update_selection(
             center_x=center_x,
             center_y=center_y)
+        self.ui_instance.pixelate_selection()
         return True
 
     def indicator_drag_start(self, event):
@@ -593,15 +594,26 @@ class Panels(InterfacePlugin):
         self.ui_instance.pixelate_selection()
         self.vars.trace = True
         # add bindings to create a new selector
-        self.widgets.canvas.tag_bind(
-            'image', "<ButtonPress-1>",
+        self.widgets.canvas.bind(
+            "<ButtonPress-1>",
             self.ui_instance.callbacks.selection_drag_start)
-        self.widgets.canvas.tag_bind(
-            'image', "<ButtonRelease-1>",
+        self.widgets.canvas.bind(
+            "<ButtonRelease-1>",
             self.ui_instance.callbacks.selection_drag_stop)
-        self.widgets.canvas.tag_bind(
-            'image', "<B1-Motion>",
+        self.widgets.canvas.bind(
+            "<B1-Motion>",
             self.ui_instance.callbacks.selection_drag_move)
+# =============================================================================
+#         self.widgets.canvas.tag_bind(
+#             'image', "<ButtonPress-1>",
+#             self.ui_instance.callbacks.selection_drag_start)
+#         self.widgets.canvas.tag_bind(
+#             'image', "<ButtonRelease-1>",
+#             self.ui_instance.callbacks.selection_drag_stop)
+#         self.widgets.canvas.tag_bind(
+#             'image', "<B1-Motion>",
+#             self.ui_instance.callbacks.selection_drag_move)
+# =============================================================================
         image_frame.grid(row=0, column=0, rowspan=3, **GRID_FULLWIDTH)
         self.sidebar_settings(
             frame_position,
