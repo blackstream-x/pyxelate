@@ -31,6 +31,7 @@ from fractions import Fraction
 
 from PIL import Image
 from PIL import ImageDraw
+from PIL import ImageFilter
 from PIL import ImageTk
 from PIL import features
 
@@ -240,16 +241,17 @@ class ShapesCache(Borg):
             return cached_shape
         #
         shape_image = Image.new('L', size, color=0)
+        dimensions = (0, 0, size[0] - 1, size[1] - 1)
         draw = ImageDraw.Draw(shape_image)
         if RECTANGLE.startswith(shape_type):
-            draw_method = draw.rectangle
+            draw.rectangle(dimensions, fill=255)
         elif ELLIPSE.startswith(shape_type):
-            draw_method = draw.ellipse
+            draw.ellipse(dimensions, fill=255)
+            shape_image = shape_image.filter(
+                ImageFilter.GaussianBlur())
         else:
             raise ValueError('Unsupported shape %r!' % shape_type)
         #
-        width, height = size
-        draw_method((0, 0, width - 1, height - 1), fill=255)
         self.__shapes[key] = shape_image
         self.__last_access[key] = time.time()
         self.delete_oldest_shapes()
