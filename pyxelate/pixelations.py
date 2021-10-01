@@ -157,22 +157,42 @@ def most_frequent_color(image):
     return selected_color
 
 
-def pixelated(original_image, tilesize=DEFAULT_TILESIZE):
-    """Return a copy of the original image, pixelated"""
-    original_width = original_image.width
-    original_height = original_image.height
-    reduced_width = original_width // tilesize + 1
-    reduced_height = original_height // tilesize + 1
+def pixelated(original_image, box=None, tilesize=DEFAULT_TILESIZE):
+    """Return a pixelated copy of the original image
+    or its box sized portion
+    """
+    if box:
+        left, top, right, bottom = box
+        original_width = right - left
+        original_height = bottom - top
+    else:
+        left, top, right, bottom = (0, 0, 0, 0)
+        original_width = original_image.width
+        original_height = original_image.height
+    #
+    (reduced_width, remainder) = divmod(original_width, tilesize)
+    if remainder:
+        reduced_width += 1
+    #
+    (reduced_height, remainder) = divmod(original_height, tilesize)
+    if remainder:
+        reduced_height += 1
+    #
     oversize_width = reduced_width * tilesize
     oversize_height = reduced_height * tilesize
-    oversized = Image.new(
-        original_image.mode,
-        (oversize_width, oversize_height),
-        color=most_frequent_color(original_image))
-    oversized.paste(original_image)
-    reduced = oversized.resize(
+    if box:
+        oversized = original_image.crop(
+            (left, top, left + oversize_width, top + oversize_height))
+    else:
+        oversized = Image.new(
+            original_image.mode,
+            (oversize_width, oversize_height),
+            color=most_frequent_color(original_image))
+        oversized.paste(original_image)
+    #
+    downscaled = oversized.resize(
         (reduced_width, reduced_height), resample=Image.BICUBIC)
-    oversized = reduced.resize(
+    oversized = downscaled.resize(
         (oversize_width, oversize_height), resample=0)
     return oversized.crop((0, 0, original_width, original_height))
 
@@ -509,7 +529,7 @@ class FramePixelation(BasePixelation):
         # logging.debug('Pixelation box: %r', box)
         # logging.debug('Pixelation width: %r', self.mask_shape.width)
         # logging.debug('Pixelation height: %r', self.mask_shape.height)
-        return pixelated(self.original.crop(box), tilesize=self.tilesize)
+        return pixelated(self.original, box=box, tilesize=self.tilesize)
 
     def get_result(self):
         """Return the result
