@@ -82,6 +82,21 @@ POSSIBLE_INDICATOR_COLORS = (
 INDICATOR = 'indicator'
 NEW_SELECTION = 'new_selection'
 
+# Mouse drag actions (“Drag with the mouse on the canvas to …”)
+MOVE_SELECTION = 'move the selection'
+RESIZE_SELECTION = 'resize the selection'
+CREATE_NEW_SELECTION = 'create a new selection'
+NEW_CROP_AREA = 'select the crop area'
+RESIZE_CROP_AREA = 'resize the crop area'
+MOVE_ZOOMED_IMAGE = 'move the zoomed image'
+
+MOUSE_DRAG_ACTIONS = (
+    # Contains all implemented drag actions
+    MOVE_SELECTION,
+    RESIZE_SELECTION,
+    CREATE_NEW_SELECTION,
+)
+
 # Grid parameters
 WITH_BORDER = dict(
     borderwidth=2,
@@ -210,6 +225,15 @@ class Callbacks(InterfacePlugin):
 
     """Callback methods"""
 
+    def __init__(self, ui_instance):
+        """Store the ui_instance"""
+        super().__init__(ui_instance)
+        self.drag_registry = {
+            MOVE_SELECTION: 'move_sel',
+            RESIZE_SELECTION: 'resize_sel',
+            CREATE_NEW_SELECTION: 'new_sel',
+        }
+
     def __clicked_inside_indicator(self, event):
         """Return True if the click was inside the indicator"""
         try:
@@ -267,8 +291,47 @@ class Callbacks(InterfacePlugin):
         """
         return gui.traced_variable(getattr(self, method_name), value=value)
 
-    def indicator_drag_move(self, event):
+    def __execute_drag_method(self, event_type, event):
+        """Execute the method for the specified event type,
+        reading the drag_action variable
+        """
+        prefix = self.drag_registry[self.tkvars.drag_action.get()]
+        method = getattr(self, '%s_drag_%s' % (prefix, event_type))
+        return method(event)
+
+    def next_drag_action(self, *unused_arguments):
+        """Select the next drag action"""
+        current_drag_action = self.tkvars.drag_action.get()
+        current_index = MOUSE_DRAG_ACTIONS.index(current_drag_action)
+        if current_index < len(MOUSE_DRAG_ACTIONS) - 1:
+            self.tkvars.drag_action.set(MOUSE_DRAG_ACTIONS[current_index + 1])
+        #
+
+    def previous_drag_action(self, *unused_arguments):
+        """Select the previous drag action"""
+        current_drag_action = self.tkvars.drag_action.get()
+        current_index = MOUSE_DRAG_ACTIONS.index(current_drag_action)
+        if current_index:
+            self.tkvars.drag_action.set(MOUSE_DRAG_ACTIONS[current_index - 1])
+        #
+
+    def drag_move(self, event):
+        """Handle dragging"""
+        return self.__execute_drag_method('move', event)
+
+    def drag_start(self, event):
+        """Begin drag"""
+        return self.__execute_drag_method('start', event)
+
+    def drag_stop(self, event):
+        """End drag"""
+        return self.__execute_drag_method('stop', event)
+
+    def move_sel_drag_move(self, event):
         """Handle dragging of the indicator"""
+        if self.vars.drag_data.item != INDICATOR:
+            return False
+        #
         # compute how much the mouse has moved
         current_x = event.x
         current_y = event.y
@@ -288,16 +351,22 @@ class Callbacks(InterfacePlugin):
         self.ui_instance.pixelate_selection()
         return True
 
-    def indicator_drag_start(self, event):
-        """Begining drag of the indicator"""
+    def move_sel_drag_start(self, event):
+        """Begin drag of the indicator"""
+        if not self.__clicked_inside_indicator(event):
+            return False
+        #
         # record the item and its location
         self.vars.drag_data.item = INDICATOR
         self.vars.drag_data.x = event.x
         self.vars.drag_data.y = event.y
         return True
 
-    def indicator_drag_stop(self, *unused_event):
+    def move_sel_drag_stop(self, *unused_event):
         """End drag of an object"""
+        if self.vars.drag_data.item != INDICATOR:
+            return False
+        #
         # reset the drag information
         self.vars.drag_data.item = None
         self.vars.drag_data.x = 0
@@ -306,16 +375,93 @@ class Callbacks(InterfacePlugin):
         self.update_selection()
         return True
 
-    # pylint: disable=too-many-locals
-    def selection_drag_move(self, event):
+    def new_sel_drag_move(self, event):
         """Drag a new selection"""
-        if self.vars.drag_data.item == INDICATOR:
-            return self.indicator_drag_move(event)
+        return self.__new_selection_drag_move(
+            event.x, event.y,
+            self.vars.drag_data.x, self.vars.drag_data.y)
+
+    def new_sel_drag_start(self, event):
+        """Begin dragging for a new selection"""
+        # record the item and its location
+        self.vars.drag_data.item = NEW_SELECTION
+        self.vars.drag_data.x = event.x
+        self.vars.drag_data.y = event.y
+        return True
+
+    def new_sel_drag_stop(self, *unused_event):
+        """End drag for a new selection"""
+        try:
+            (width, height, center_x, center_y) = \
+                self.__get_bbox_selection(NEW_SELECTION)
+        except TypeError:
+            # No selection dragged (i.e. click without dragging)
+            return False
         #
-        current_x = event.x
-        current_y = event.y
-        [left, right] = sorted((current_x, self.vars.drag_data.x))
-        [top, bottom] = sorted((current_y, self.vars.drag_data.y))
+        self.widgets.canvas.delete(NEW_SELECTION)
+        # Adjust to minimum sizes
+        if width < MINIMUM_SELECTION_SIZE:
+            width = MINIMUM_SELECTION_SIZE
+        #
+        if height < MINIMUM_SELECTION_SIZE:
+            height = MINIMUM_SELECTION_SIZE
+        #
+        # Set the selection attributes
+        self.ui_instance.update_selection(
+            center_x=center_x,
+            center_y=center_y,
+            width=width,
+            height=height)
+        # Trigger the selection change explicitly
+        self.update_selection()
+        # Snap back the drag action to safe selection moving
+        self.tkvars.drag_action.set(MOVE_SELECTION)
+        return True
+
+    def resize_sel_drag_move(self, event):
+        """Drag for selection resize"""
+        delta_x = event.x - self.vars.drag_data.x
+        delta_y = event.y - self.vars.drag_data.y
+        current_x = self.vars.drag_data.var_x + delta_x
+        current_y = self.vars.drag_data.var_y + delta_y
+        return self.__new_selection_drag_move(
+            current_x, current_y,
+            self.vars.drag_data.anchor_x, self.vars.drag_data.anchor_y)
+
+    def resize_sel_drag_start(self, event):
+        """Begin dragging for selection resize"""
+        # record the item and its location
+        self.vars.drag_data.item = NEW_SELECTION
+        self.vars.drag_data.x = event.x
+        self.vars.drag_data.y = event.y
+        (left, top, right, bottom) = self.widgets.canvas.bbox(INDICATOR)
+        center_x = (left + right) // 2
+        center_y = (top + bottom) // 2
+        # Ancor at the opposite side, seen from the selection center
+        if event.x > center_x:
+            self.vars.drag_data.anchor_x = left
+            self.vars.drag_data.var_x = right
+        else:
+            self.vars.drag_data.var_x = left
+            self.vars.drag_data.anchor_x = right
+        #
+        if event.y > center_y:
+            self.vars.drag_data.anchor_y = top
+            self.vars.drag_data.var_y = bottom
+        else:
+            self.vars.drag_data.var_y = top
+            self.vars.drag_data.anchor_y = bottom
+        #
+        return True
+
+    resize_sel_drag_stop = new_sel_drag_stop
+
+    def __new_selection_drag_move(self,
+                                  current_x, current_y,
+                                  origin_x, origin_y):
+        """Move "rubber frame" of a new or resized selection"""
+        [left, right] = sorted((current_x, origin_x))
+        [top, bottom] = sorted((current_y, origin_y))
         # Respect "quadratic" shapes
         if self.tkvars.selection.shape.get() in QUADRATIC_SHAPES:
             width = right - left
@@ -362,47 +508,6 @@ class Callbacks(InterfacePlugin):
             center_y=center_y,
             width=width,
             height=height)
-        return True
-
-    def selection_drag_start(self, event):
-        """Begining dragging for a new selection"""
-        # record the item and its location
-        if self.__clicked_inside_indicator(event):
-            return self.indicator_drag_start(event)
-        #
-        self.vars.drag_data.item = NEW_SELECTION
-        self.vars.drag_data.x = event.x
-        self.vars.drag_data.y = event.y
-        return True
-
-    def selection_drag_stop(self, *unused_event):
-        """End drag for a new selection"""
-        if self.vars.drag_data.item == INDICATOR:
-            return self.indicator_drag_stop()
-        #
-        try:
-            (width, height, center_x, center_y) = \
-                self.__get_bbox_selection(NEW_SELECTION)
-        except TypeError:
-            # No selection dragged (i.e. click without dragging)
-            return False
-        #
-        self.widgets.canvas.delete(NEW_SELECTION)
-        # Adjust to minimum sizes
-        if width < MINIMUM_SELECTION_SIZE:
-            width = MINIMUM_SELECTION_SIZE
-        #
-        if height < MINIMUM_SELECTION_SIZE:
-            height = MINIMUM_SELECTION_SIZE
-        #
-        # Set the selection attributes
-        self.ui_instance.update_selection(
-            center_x=center_x,
-            center_y=center_y,
-            width=width,
-            height=height)
-        # Trigger the selection change explicitly
-        self.update_selection()
         return True
 
     def redraw_indicator(self, *unused_arguments):
@@ -602,24 +707,13 @@ class Panels(InterfacePlugin):
         # add bindings to create a new selector
         self.widgets.canvas.bind(
             "<ButtonPress-1>",
-            self.ui_instance.callbacks.selection_drag_start)
+            self.ui_instance.callbacks.drag_start)
         self.widgets.canvas.bind(
             "<ButtonRelease-1>",
-            self.ui_instance.callbacks.selection_drag_stop)
+            self.ui_instance.callbacks.drag_stop)
         self.widgets.canvas.bind(
             "<B1-Motion>",
-            self.ui_instance.callbacks.selection_drag_move)
-# =============================================================================
-#         self.widgets.canvas.tag_bind(
-#             'image', "<ButtonPress-1>",
-#             self.ui_instance.callbacks.selection_drag_start)
-#         self.widgets.canvas.tag_bind(
-#             'image', "<ButtonRelease-1>",
-#             self.ui_instance.callbacks.selection_drag_stop)
-#         self.widgets.canvas.tag_bind(
-#             'image', "<B1-Motion>",
-#             self.ui_instance.callbacks.selection_drag_move)
-# =============================================================================
+            self.ui_instance.callbacks.drag_move)
         image_frame.grid(row=0, column=0, rowspan=3, **GRID_FULLWIDTH)
         self.sidebar_settings(
             frame_position,
@@ -669,6 +763,15 @@ class Panels(InterfacePlugin):
         color_opts.grid(
             sticky=tkinter.W,
             row=gui.grid_row_of(label), column=1, columnspan=3)
+        self.ui_instance.heading_with_help_button(
+            settings_frame, 'Drag on the canvas to')
+        drag_opts = tkinter.OptionMenu(
+            settings_frame,
+            self.tkvars.drag_action,
+            *MOUSE_DRAG_ACTIONS)
+        drag_opts.grid(
+            sticky=tkinter.W,
+            column=0, columnspan=4)
         settings_frame.columnconfigure(4, weight=100)
         settings_frame.grid(row=0, column=1, **GRID_FULLWIDTH)
         self.ui_instance.toggle_height()
@@ -721,12 +824,18 @@ class UserInterface:
             drag_data=Namespace(
                 x=0,
                 y=0,
+                anchor_x=0,
+                anchor_y=0,
+                var_x=0,
+                var_y=0,
                 item=None),
         )
         self.tkvars = Namespace(
             file_name=tkinter.StringVar(),
+            drag_action=tkinter.StringVar(),
             show_preview=tkinter.IntVar(),
         )
+        self.tkvars.drag_action.set(MOVE_SELECTION)
         self.widgets = Namespace(
             action_area=None,
             # buttons_area=None,
@@ -932,19 +1041,7 @@ class UserInterface:
             appearance.update(
                 dict(width=1, fill=current_color, stipple=stipple))
         #
-        create_widget(
-            left, top, right, bottom,
-            **appearance)
-        # add bindings to drag the selector over the image
-        canvas.tag_bind(
-            INDICATOR, "<ButtonPress-1>",
-            self.callbacks.indicator_drag_start)
-        canvas.tag_bind(
-            INDICATOR, "<ButtonRelease-1>",
-            self.callbacks.indicator_drag_stop)
-        canvas.tag_bind(
-            INDICATOR, "<B1-Motion>",
-            self.callbacks.indicator_drag_move)
+        create_widget(left, top, right, bottom, **appearance)
 
     def pixelate_selection(self):
         """Apply the pixelation to the image and update the preview"""
@@ -1153,6 +1250,10 @@ class UserInterface:
         quit_button.grid(row=last_row, column=2, **buttons_grid)
         self.widgets.action_area.rowconfigure(1, weight=100)
         buttons_area.grid(row=2, column=1, sticky=tkinter.E)
+        self.main_window.bind_all(
+            '<KeyPress-Prior>', self.callbacks.previous_drag_action)
+        self.main_window.bind_all(
+            '<KeyPress-Next>', self.callbacks.next_drag_action)
 
     def toggle_height(self):
         """Toggle height spinbox to follow width"""

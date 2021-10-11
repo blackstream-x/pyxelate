@@ -15,7 +15,8 @@ This is an example of the GUI:
 
 In the left panel, the image is loaded, and an indicator is displayed.
 You can grab the indicator and drag it around,
-or create a new selection by dragging with the mouse anywhere else in the image.
+or resize ist, or create a new selection
+(depending on the value of the "Drag on the canvas to" option).
 
 On the right panel, you can choose another image,
 or use the controls to fine-tune the pixelation by changing the

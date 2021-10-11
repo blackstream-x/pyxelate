@@ -1,6 +1,6 @@
 {
   "Global": {
-    "pixelate_video.py": "This is a script for pixelating partial areas of a number of frames in a\n(short) video clip.\nWhen loading a video, it will be split up into frames in a temporary directory.\n\nThe workflow in this script is\\:\n1. Select a start frame.\n2. Select the area where the pixelation will start in the selected start frame.\n3. Select an end frame.\n4. Select the area where the pixelation will end in the selected end frame.\n5. Preview the partially pixelated video (flip book style)\n6. Save the video and/or create another pixelation in the same video.\n"
+    "pixelate_video.py": "This is a script for pixelating partial areas of a number of frames in a\n(short) video clip.\nWhen loading a video, it will be split up into frames in a temporary directory.\n\nThe workflow in this script is\\:\n1. Select a start frame.\n2. Select the area where the pixelation will start in the selected start frame.\n3. Select an end frame.\n4. Select the area where the pixelation will end in the selected end frame.\n5. Preview the partially pixelated video (flip book style)\n6. Save the video and/or create another pixelation in the same video.\n\nDrag the selection around, resize it or create a new one.\n"
   },
   "Original file": {
     "The first line": "shows the name of the current video file",
@@ -38,5 +38,13 @@
     "Change these colours for better contrast with the frame": null,
     "Current": "Colour of the current indicator",
     "New": "Colour of the \u201crubberband\u201d shown when dragging a new selection"
+  },
+  "Drag on the canvas to": {
+    "move the selection": "Grab the selection with the mouse and move it around",
+    "resize the selection": "Resize the selection",
+    "create a new selection": "create a new selection anywhere in the image",
+    "select the crop area": "(tba) define the area to which the video will be cropped",
+    "resize the crop area": "(tba) resize the area to which the video will be cropped",
+    "move the zoomed image": "(tba) move the image when parts are outside of the canvas"
   }
 }

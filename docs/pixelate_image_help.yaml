@@ -2,8 +2,7 @@ Global:
   "pixelate_image.py": |
     This is a script for pixelating partial areas of images.
 
-    Drag the selection around, or create a new one by dragging
-    outside of the selection indicator.
+    Drag the selection around, resize it or create a new one.
 
     Fine-tune selection size and position using the controls
     in the “Selection” section of the right hand panel.
@@ -43,3 +42,11 @@ Indicator colours:
   Change these colours for better contrast with the image:
   Current: Colour of the current indicator
   New: Colour of the “rubberband” shown when dragging a new selection
+
+Drag on the canvas to:
+  move the selection: Grab the selection with the mouse and move it around
+  resize the selection: Resize the selection
+  create a new selection: create a new selection anywhere in the image
+  select the crop area: (tba) define the area to which the image will be cropped
+  resize the crop area: (tba) resize the area to which the image will be cropped
+  move the zoomed image: (tba) move the image when parts are outside of the canvas

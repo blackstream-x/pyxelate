@@ -473,9 +473,6 @@ class Panels(core.Panels):
         except AttributeError:
             pass
         #
-        # FIXME: Crash when showing slider or canvas
-        # FIXME: in the preview panel
-        #
         logging.debug('Showing slider')
         self.widgets.frames_slider = tkinter.Scale(
             image_frame,

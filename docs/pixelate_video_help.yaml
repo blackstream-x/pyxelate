@@ -12,6 +12,8 @@ Global:
     5. Preview the partially pixelated video (flip book style)
     6. Save the video and/or create another pixelation in the same video.
 
+    Drag the selection around, resize it or create a new one.
+
 Original file:
   The first line: shows the name of the current video file
   Choose another file: |
@@ -74,4 +76,13 @@ Indicator colours:
   Change these colours for better contrast with the frame:
   Current: Colour of the current indicator
   New: Colour of the “rubberband” shown when dragging a new selection
+
+Drag on the canvas to:
+  move the selection: Grab the selection with the mouse and move it around
+  resize the selection: Resize the selection
+  create a new selection: create a new selection anywhere in the image
+  select the crop area: (tba) define the area to which the video will be cropped
+  resize the crop area: (tba) resize the area to which the video will be cropped
+  move the zoomed image: (tba) move the image when parts are outside of the canvas
+
 
