@@ -1,0 +1,76 @@
+digraph "pixelate-videos generic workflow (v0.8+)" {
+
+load_video[label="Load video", shape=rect]
+preprocess_video[label="Preprocess video:\nde-shake if possible\nand requested,\ncut if requested,\nsplit into frames", shape=Mcircle]
+new_pixelation[shape=point, style=invis]
+start_position[label="Select pixelation\nstart frame\nand position", shape=rect]
+end_position[label="Select pixelation\nend frame\nand position", shape=rect]
+apply_pixelation[label="Pixelate\nframe range", shape=parallelogram]
+show_preview[label="Show preview\nas a flip book", shape=rect]
+add_pixelation[label="Add another\npixelation?", shape=diamond]
+set_save_params[label="Set save\nparameters", shape=rect]
+save_video[label="Assemble video", shape=parallelogram]
+quit[label="Quit", shape=rect]
+
+in_original_video[label="Original\nvideo", shape=cylinder]
+out_original_frames[label="Original\nframes", shape=cylinder]
+in_start_frame[label="Start frame", shape=note]
+out_start_position[label="Start frame\nStart position\nCrop area", shape=note]
+out_end_position[label="End frame\nEnd position\nCrop area", shape=note]
+in_frames_and_positions[label="Start frame\nStart position\nEnd frame\nEnd position", shape=note]
+in_original_frames_1[label="Original\nframes", shape=cylinder]
+in_original_frames_2[label="Original\nframes", shape=cylinder]
+in_original_frames_3[label="Original\nframes", shape=cylinder]
+out_modified_frames[label="Modified\nframes", shape=cylinder]
+in_modified_frames_1[label="Unchanged and\nmodified\nframes", shape=cylinder]
+out_crop_area[label="Crop area", shape=note]
+in_crop_area[label="Crop area", shape=note]
+in_modified_frames_2[label="Unchanged and\nmodified\nframes", shape=cylinder]
+in_original_audio_stream[label="Original video’s\naudio stream(s)\nif avaiable", shape=cylinder, style=dotted]
+out_result_video[label="Result\nvideo", shape=cylinder]
+
+anytime_load[label="any\ntime", shape=circle]
+anytime_quit[label="any\ntime", shape=circle]
+additional_pixelation_1[label="B", shape=circle]
+additional_pixelation_2[label="B", shape=circle]
+
+{rank=same; in_original_video; preprocess_video; out_original_frames}
+{rank=same; additional_pixelation_1; new_pixelation}
+{rank=same; in_original_frames_1; start_position; out_start_position}
+{rank=same; in_original_frames_2; in_start_frame; end_position; out_end_position}
+{rank=same; in_original_frames_3; in_frames_and_positions; apply_pixelation; out_modified_frames}
+{rank=same; in_modified_frames_1; show_preview; out_crop_area}
+{rank=same; add_pixelation; additional_pixelation_2}
+{rank=same; in_crop_area; set_save_params}
+{rank=same; in_original_audio_stream; in_modified_frames_2; save_video; out_result_video}
+
+{rank=same; anytime_load; load_video}
+{rank=same; anytime_quit; quit}
+
+Start -> load_video;
+load_video -> preprocess_video;
+in_original_video -> preprocess_video -> out_original_frames;
+preprocess_video -> new_pixelation;
+additional_pixelation_1 -> new_pixelation;
+new_pixelation -> start_position;
+in_original_frames_1 -> start_position -> out_start_position;
+start_position -> end_position;
+in_original_frames_2 -> in_start_frame -> end_position -> out_end_position;
+end_position -> apply_pixelation;
+in_original_frames_3 -> in_frames_and_positions -> apply_pixelation -> out_modified_frames;
+apply_pixelation -> show_preview;
+in_modified_frames_1 -> show_preview -> out_crop_area;
+show_preview -> add_pixelation;
+add_pixelation -> additional_pixelation_2[label="yes"];
+add_pixelation -> set_save_params[label="no"];
+in_crop_area -> set_save_params;
+set_save_params -> save_video;
+in_original_audio_stream -> in_modified_frames_2[style=dotted];
+in_modified_frames_2 -> save_video -> out_result_video;
+save_video -> quit;
+
+anytime_load -> load_video;
+anytime_quit -> quit;
+quit -> Finish;
+
+}
