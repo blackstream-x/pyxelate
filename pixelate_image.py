@@ -24,7 +24,7 @@ from tkinter import messagebox
 
 # local modules
 
-from pyxelate import app
+from pyxelate import core
 from pyxelate import gui
 from pyxelate import pixelations
 
@@ -127,7 +127,7 @@ class FrozenSelection:
         self.original_values = {key: selection[key].get()
                                 for key in self.variables}
         self.effective_values = dict(self.original_values)
-        if self.effective_values['shape'] in app.QUADRATIC_SHAPES:
+        if self.effective_values['shape'] in core.QUADRATIC_SHAPES:
             self.effective_values['height'] = self.effective_values['width']
         #
 
@@ -153,7 +153,7 @@ class FrozenSelection:
         return repr(tuple(self.effective_values.values()))
 
 
-class ImageCallbacks(app.Callbacks):
+class ImageCallbacks(core.Callbacks):
 
     """Callbacks for the new user interface"""
 
@@ -181,7 +181,7 @@ class ImageCallbacks(app.Callbacks):
         super().update_selection()
 
 
-class Panels(app.Panels):
+class Panels(core.Panels):
 
     """Panels and panel components"""
 
@@ -206,7 +206,7 @@ class Panels(app.Panels):
         self.component_select_area()
 
 
-class ImageUI(app.UserInterface):
+class ImageUI(core.UserInterface):
 
     """Modular user interface for image pixelation"""
 
@@ -235,12 +235,12 @@ class ImageUI(app.UserInterface):
         logging.debug('File formats open support: %r', open_support)
         logging.debug('File formats save support: %r', save_support)
         self.vars.update(
-            app.Namespace(
+            core.Namespace(
                 open_support=sorted(open_support),
                 save_support=sorted(save_support)))
         self.tkvars.update(
-            app.Namespace(
-                buttonstate=app.Namespace(
+            core.Namespace(
+                buttonstate=core.Namespace(
                     apply=self.callbacks.get_traced_stringvar(
                         'update_buttons', value=tkinter.NORMAL),
                     save=self.callbacks.get_traced_stringvar(
@@ -252,8 +252,8 @@ class ImageUI(app.UserInterface):
         (additional widgets)
         """
         self.widgets.update(
-            app.Namespace(
-                buttons=app.Namespace(
+            core.Namespace(
+                buttons=core.Namespace(
                     undo=None,
                     apply=None,
                     save=None)))
@@ -337,7 +337,7 @@ class ImageUI(app.UserInterface):
         if not sel_width:
             # Set initial selection width to 20% of image width
             sel_width = max(
-                app.INITIAL_SELECTION_SIZE,
+                core.INITIAL_SELECTION_SIZE,
                 round(im_width / 5))
         #
         sel_height = self.tkvars.selection.height.get()
@@ -351,7 +351,7 @@ class ImageUI(app.UserInterface):
             height=min(sel_height, im_height))
         # set the shape
         if not self.tkvars.selection.shape.get():
-            self.tkvars.selection.shape.set(app.OVAL)
+            self.tkvars.selection.shape.set(core.OVAL)
         #
         # set tilesize
         if not self.tkvars.selection.tilesize.get():

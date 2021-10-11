@@ -29,7 +29,7 @@ from tkinter import messagebox
 
 # local modules
 
-from pyxelate import app
+from pyxelate import core
 from pyxelate import ffmpegwrappers as ffmw
 from pyxelate import gui
 from pyxelate import pixelations
@@ -263,7 +263,7 @@ class FramesCache:
         #
 
 
-class Actions(app.InterfacePlugin):
+class Actions(core.InterfacePlugin):
 
     """Pre-panel actions for the video GUI in sequential order"""
 
@@ -292,7 +292,7 @@ class Actions(app.InterfacePlugin):
         if not sel_width:
             # Set initial selection width to 20% of image width
             sel_width = max(
-                app.INITIAL_SELECTION_SIZE,
+                core.INITIAL_SELECTION_SIZE,
                 round(im_width / 5))
         #
         sel_height = self.tkvars.selection.height.get()
@@ -308,7 +308,7 @@ class Actions(app.InterfacePlugin):
             height=min(sel_height, im_height))
         # set the shape
         if not self.tkvars.selection.shape.get():
-            self.tkvars.selection.shape.set(app.OVAL)
+            self.tkvars.selection.shape.set(core.OVAL)
         #
         # set tilesize
         if not self.tkvars.selection.tilesize.get():
@@ -357,8 +357,8 @@ class Actions(app.InterfacePlugin):
         self.vars.opxsf.append(self.vars.start_at.frame)
         self.vars.spxsf = sorted(set(self.vars.opxsf))
         # Set pixelations shape
-        px_shape = app.SHAPES[self.vars.start_at.shape]
-        if px_shape != app.SHAPES[self.vars.end_at.shape]:
+        px_shape = core.SHAPES[self.vars.start_at.shape]
+        if px_shape != core.SHAPES[self.vars.end_at.shape]:
             raise ValueError('Shapes at start and end must be the same!')
         #
         self.vars.modified_frames = tempfile.TemporaryDirectory()
@@ -391,7 +391,7 @@ class Actions(app.InterfacePlugin):
         # self.ui_instance.adjust_current_frame(1)
 
 
-class VideoCallbacks(app.Callbacks):
+class VideoCallbacks(core.Callbacks):
 
     """Callback functions for the video UI"""
 
@@ -458,7 +458,7 @@ class VideoCallbacks(app.Callbacks):
         #
 
 
-class Panels(app.Panels):
+class Panels(core.Panels):
 
     """Panels and panel components"""
 
@@ -503,9 +503,9 @@ class Panels(app.Panels):
         #     '%s frame# is %r', position, self.tkvars.current_frame.get())
         image_frame = tkinter.Frame(
             self.widgets.action_area,
-            **app.WITH_BORDER)
+            **core.WITH_BORDER)
         self.component_frames_slider(image_frame, position)
-        image_frame.grid(row=0, column=0, rowspan=3, **app.GRID_FULLWIDTH)
+        image_frame.grid(row=0, column=0, rowspan=3, **core.GRID_FULLWIDTH)
         self.sidebar_frameselection(position)
         # logging.debug(
         #     '%s frame# is %r', position, self.tkvars.current_frame.get())
@@ -620,14 +620,14 @@ class Panels(app.Panels):
         """Show the settings frame"""
         frameselection_frame = tkinter.Frame(
             self.widgets.action_area,
-            **app.WITH_BORDER)
+            **core.WITH_BORDER)
         self.component_file_info(frameselection_frame)
         self.component_image_info(
             frameselection_frame,
             frame_position,
             change_enabled=True)
         frameselection_frame.columnconfigure(4, weight=100)
-        frameselection_frame.grid(row=0, column=1, **app.GRID_FULLWIDTH)
+        frameselection_frame.grid(row=0, column=1, **core.GRID_FULLWIDTH)
 
     # Panels in order of appearance
 
@@ -653,10 +653,10 @@ class Panels(app.Panels):
         """Show the image on a canvas and let
         the user select the area to be pixelated
         """
-        if self.vars.start_at.shape in app.ELLIPTIC_SHAPES:
-            allowed_shapes = app.ELLIPTIC_SHAPES
+        if self.vars.start_at.shape in core.ELLIPTIC_SHAPES:
+            allowed_shapes = core.ELLIPTIC_SHAPES
         else:
-            allowed_shapes = app.RECTANGULAR_SHAPES
+            allowed_shapes = core.RECTANGULAR_SHAPES
         #
         self.component_select_area(
             'End',
@@ -667,12 +667,12 @@ class Panels(app.Panels):
         """
         image_frame = tkinter.Frame(
             self.widgets.action_area,
-            **app.WITH_BORDER)
+            **core.WITH_BORDER)
         self.component_frames_slider(image_frame, 'Current')
-        image_frame.grid(row=0, column=0, rowspan=3, **app.GRID_FULLWIDTH)
+        image_frame.grid(row=0, column=0, rowspan=3, **core.GRID_FULLWIDTH)
         sidebar_frame = tkinter.Frame(
             self.widgets.action_area,
-            **app.WITH_BORDER)
+            **core.WITH_BORDER)
         self.component_file_info(sidebar_frame)
         self.component_image_info(
             sidebar_frame,
@@ -681,10 +681,10 @@ class Panels(app.Panels):
         self.component_add_another(sidebar_frame)
         self.component_export_settings(sidebar_frame)
         sidebar_frame.columnconfigure(4, weight=100)
-        sidebar_frame.grid(row=0, column=1, **app.GRID_FULLWIDTH)
+        sidebar_frame.grid(row=0, column=1, **core.GRID_FULLWIDTH)
 
 
-class Rollbacks(app.InterfacePlugin):
+class Rollbacks(core.InterfacePlugin):
 
     """Rollback acction in order of appearance"""
 
@@ -746,7 +746,7 @@ class Rollbacks(app.InterfacePlugin):
         self.vars.modified_frames.cleanup()
 
 
-class VideoUI(app.UserInterface):
+class VideoUI(core.UserInterface):
 
     """Modular user interface for video pixelation"""
 
@@ -774,7 +774,7 @@ class VideoUI(app.UserInterface):
         """
         super().additional_variables()
         self.vars.update(
-            app.Namespace(
+            core.Namespace(
                 original_frames=None,
                 modified_frames=None,
                 nb_frames=None,
@@ -788,23 +788,23 @@ class VideoUI(app.UserInterface):
                 frames_cache=None,
                 duration_usec=None,
                 unsaved_changes=False,
-                frame_limits=app.Namespace(
+                frame_limits=core.Namespace(
                     minimum=1,
                     maximum=1),
-                start_at=app.Namespace(**EMPTY_SELECTION),
-                end_at=app.Namespace(**EMPTY_SELECTION)))
+                start_at=core.Namespace(**EMPTY_SELECTION),
+                end_at=core.Namespace(**EMPTY_SELECTION)))
         self.tkvars.update(
-            app.Namespace(
+            core.Namespace(
                 current_frame=self.callbacks.get_traced_intvar(
                     'change_frame'),
                 current_frame_text=self.callbacks.get_traced_stringvar(
                     'change_frame_from_text'),
                 end_frame=tkinter.IntVar(),
-                export=app.Namespace(
+                export=core.Namespace(
                     crf=tkinter.IntVar(),
                     include_audio=tkinter.IntVar(),
                     preset=tkinter.StringVar()),
-                buttonstate=app.Namespace(
+                buttonstate=core.Namespace(
                     previous=self.callbacks.get_traced_stringvar(
                         'update_buttons', value=tkinter.DISABLED),
                     next_=self.callbacks.get_traced_stringvar(
@@ -820,8 +820,8 @@ class VideoUI(app.UserInterface):
         (additional widgets)
         """
         self.widgets.update(
-            app.Namespace(
-                buttons=app.Namespace(
+            core.Namespace(
+                buttons=core.Namespace(
                     previous=None,
                     next_=None,
                     more=None),
@@ -945,8 +945,8 @@ class VideoUI(app.UserInterface):
             progress.action_cancel()
         #
         # Clear selection
-        self.vars.start_at = app.Namespace(**EMPTY_SELECTION)
-        self.vars.end_at = app.Namespace(**EMPTY_SELECTION)
+        self.vars.start_at = core.Namespace(**EMPTY_SELECTION)
+        self.vars.end_at = core.Namespace(**EMPTY_SELECTION)
         # set the original path and displayed file name
         self.vars.original_path = file_path
         self.tkvars.file_name.set(file_path.name)
@@ -1046,7 +1046,7 @@ class VideoUI(app.UserInterface):
             storage_vars[item] = value
         #
         # Respect quadratic shapes
-        if storage_vars['shape'] in app.QUADRATIC_SHAPES:
+        if storage_vars['shape'] in core.QUADRATIC_SHAPES:
             storage_vars['height'] = storage_vars['width']
         #
 

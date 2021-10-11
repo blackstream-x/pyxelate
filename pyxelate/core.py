@@ -2,9 +2,9 @@
 
 """
 
-app.py
+core.py
 
-Common application parts of the pyxelate scripts
+Core application parts of the pyxelate scripts
 
 """
 
