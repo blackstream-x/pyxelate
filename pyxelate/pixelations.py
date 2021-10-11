@@ -50,10 +50,10 @@ from PIL import features
 DEFAULT_TILESIZE = 25
 DEFAULT_CANVAS_SIZE = (720, 405)
 
-ELLIPSE = 'ellipse'
-RECTANGLE = 'rectangle'
+ELLIPSE = "ellipse"
+RECTANGLE = "rectangle"
 
-FRAME_PATTERN = 'frame%04d.jpg'
+FRAME_PATTERN = "frame%04d.jpg"
 
 
 #
@@ -63,10 +63,10 @@ FRAME_PATTERN = 'frame%04d.jpg'
 
 def get_supported_extensions():
     """Get file name extensions supported by PIL"""
-    prx_separator_line = re.compile('^-+$', re.M)
-    prx_comma_blank = re.compile(r',\s+')
-    prx_extensions = re.compile(r'^Extensions:\s+')
-    prx_capabilities = re.compile(r'^Features:\s+')
+    prx_separator_line = re.compile("^-+$", re.M)
+    prx_comma_blank = re.compile(r",\s+")
+    prx_extensions = re.compile(r"^Extensions:\s+")
+    prx_capabilities = re.compile(r"^Features:\s+")
     open_support = set()
     save_support = set()
     pil_info = io.StringIO()
@@ -79,23 +79,25 @@ def get_supported_extensions():
     #
     pil_info.seek(0)
     for block in prx_separator_line.split(pil_info.read()):
-        if 'Extensions:' in block and 'Features:' in block:
+        if "Extensions:" in block and "Features:" in block:
             extensions = []
             capabilities = []
             for line in block.splitlines():
                 if prx_extensions.match(line):
                     extensions = prx_comma_blank.split(
-                        prx_extensions.sub('', line))
+                        prx_extensions.sub("", line)
+                    )
                 elif prx_capabilities.match(line):
                     capabilities = prx_comma_blank.split(
-                        prx_capabilities.sub('', line))
+                        prx_capabilities.sub("", line)
+                    )
                     #
                 #
             #
-            if 'open' in capabilities:
+            if "open" in capabilities:
                 open_support.update(extensions)
             #
-            if 'save' in capabilities:
+            if "save" in capabilities:
                 save_support.update(extensions)
             #
         #
@@ -133,33 +135,37 @@ def most_frequent_color(image):
     selected_color = most_frequent_pixel_color[1]
     if isinstance(selected_color, int):
         if image.palette:
-            if image.palette.mode == 'RGB':
+            if image.palette.mode == "RGB":
                 # Grab the color values from the palette
                 values = []
                 palette_size = int(
-                    len(image.palette.palette) / len(image.palette.mode))
-                logging.debug('Palette size: %r', palette_size)
+                    len(image.palette.palette) / len(image.palette.mode)
+                )
+                logging.debug("Palette size: %r", palette_size)
                 for band_index, band_name in enumerate(image.palette.mode):
                     total_index = selected_color + band_index * palette_size
                     channel_value = image.palette.palette[total_index]
                     values.append(channel_value)
                     logging.debug(
-                        'Band %r index %r (total %r) value: %r',
+                        "Band %r index %r (total %r) value: %r",
                         band_name,
                         selected_color,
                         total_index,
-                        channel_value)
+                        channel_value,
+                    )
                 #
                 return tuple(values)
             #
-        elif image.mode == 'L':
+        elif image.mode == "L":
             return (selected_color,) * 3
         #
     #
     if not isinstance(selected_color, tuple):
         raise ValueError(
-            'Cannot handle color value {0!r} in image mode {1!r}.'.format(
-                selected_color, image.mode))
+            "Cannot handle color value {0!r} in image mode {1!r}.".format(
+                selected_color, image.mode
+            )
+        )
     #
     return selected_color
 
@@ -189,18 +195,22 @@ def pixelated(original_image, box=None, tilesize=DEFAULT_TILESIZE):
     oversize_height = reduced_height * tilesize
     if box:
         oversized = original_image.crop(
-            (left, top, left + oversize_width, top + oversize_height))
+            (left, top, left + oversize_width, top + oversize_height)
+        )
     else:
         oversized = Image.new(
             original_image.mode,
             (oversize_width, oversize_height),
-            color=most_frequent_color(original_image))
+            color=most_frequent_color(original_image),
+        )
         oversized.paste(original_image)
     #
     downscaled = oversized.resize(
-        (reduced_width, reduced_height), resample=Image.BICUBIC)
+        (reduced_width, reduced_height), resample=Image.BICUBIC
+    )
     oversized = downscaled.resize(
-        (oversize_width, oversize_height), resample=0)
+        (oversize_width, oversize_height), resample=0
+    )
     return oversized.crop((0, 0, original_width, original_height))
 
 
@@ -214,7 +224,7 @@ class Borg:
     """Shared state base class as documented in
     <https://www.oreilly.com/
      library/view/python-cookbook/0596001673/ch05s23.html>
-     """
+    """
 
     _shared_state = {}
 
@@ -246,17 +256,16 @@ class ShapesCache(Borg):
             self.__last_access[key] = time.time()
             return cached_shape
         #
-        shape_image = Image.new('L', size, color=0)
+        shape_image = Image.new("L", size, color=0)
         dimensions = (0, 0, size[0] - 1, size[1] - 1)
         draw = ImageDraw.Draw(shape_image)
         if RECTANGLE.startswith(shape_type):
             draw.rectangle(dimensions, fill=255)
         elif ELLIPSE.startswith(shape_type):
             draw.ellipse(dimensions, fill=255)
-            shape_image = shape_image.filter(
-                ImageFilter.GaussianBlur())
+            shape_image = shape_image.filter(ImageFilter.GaussianBlur())
         else:
-            raise ValueError('Unsupported shape %r!' % shape_type)
+            raise ValueError("Unsupported shape %r!" % shape_type)
         #
         self.__shapes[key] = shape_image
         self.__last_access[key] = time.time()
@@ -268,7 +277,7 @@ class ShapesCache(Borg):
         if the limit has been exceeded
         """
         if len(self.__shapes) > self.limit:
-            for key in sorted(self.__last_access)[:-self.limit]:
+            for key in sorted(self.__last_access)[: -self.limit]:
                 del self.__shapes[key]
                 del self.__last_access[key]
             #
@@ -279,13 +288,11 @@ class BaseImage:
 
     """Image base class"""
 
-    kw_orig = 'original image'
-    kw_display_ratio = 'display ratio'
-    kw_tk_original = 'canvas-sized original image for tkinter'
+    kw_orig = "original image"
+    kw_display_ratio = "display ratio"
+    kw_tk_original = "canvas-sized original image for tkinter"
 
-    def __init__(self,
-                 image_path,
-                 canvas_size=DEFAULT_CANVAS_SIZE):
+    def __init__(self, image_path, canvas_size=DEFAULT_CANVAS_SIZE):
         """Allocate the internal cache"""
 
         self.__cache = {}
@@ -336,7 +343,8 @@ class BaseImage:
             return 1
         #
         return self.lazy_evaluation(
-            self.kw_display_ratio, self.get_display_ratio)
+            self.kw_display_ratio, self.get_display_ratio
+        )
 
     @property
     def original(self):
@@ -353,10 +361,8 @@ class BaseImage:
     def get_display_ratio(self):
         """Get the display ratio from the image and canvas sizes"""
         (canvas_width, canvas_height) = self.__canvas_size
-        ratio_x = dimension_display_ratio(
-            self.original.width, canvas_width)
-        ratio_y = dimension_display_ratio(
-            self.original.height, canvas_height)
+        ratio_x = dimension_display_ratio(self.original.width, canvas_width)
+        ratio_y = dimension_display_ratio(self.original.height, canvas_height)
         return max(ratio_x, ratio_y)
 
     def from_display_size(self, display_length):
@@ -379,9 +385,12 @@ class BaseImage:
         """
         if self.display_ratio > 1:
             return source_image.resize(
-                (int(source_image.width / self.display_ratio),
-                 int(source_image.height / self.display_ratio)),
-                resample=Image.BICUBIC)
+                (
+                    int(source_image.width / self.display_ratio),
+                    int(source_image.height / self.display_ratio),
+                ),
+                resample=Image.BICUBIC,
+            )
         #
         return source_image
 
@@ -392,23 +401,24 @@ class BaseImage:
         if not source_image:
             source_image = self.original
         #
-        return ImageTk.PhotoImage(
-            self.downsized_to_canvas(source_image))
+        return ImageTk.PhotoImage(self.downsized_to_canvas(source_image))
 
 
 class BasePixelation(BaseImage):
 
     """Pixelation base class"""
 
-    kw_px_area = 'pixelated image area'
-    kw_px_mask = 'pixelated area mask'
+    kw_px_area = "pixelated image area"
+    kw_px_mask = "pixelated area mask"
     # kw_mask_shape = 'mask_shape'
-    kw_result = 'resulting image'
+    kw_result = "resulting image"
 
-    def __init__(self,
-                 image_path,
-                 tilesize=DEFAULT_TILESIZE,
-                 canvas_size=DEFAULT_CANVAS_SIZE):
+    def __init__(
+        self,
+        image_path,
+        tilesize=DEFAULT_TILESIZE,
+        canvas_size=DEFAULT_CANVAS_SIZE,
+    ):
         """Allocate the internal cache"""
         super().__init__(image_path, canvas_size=canvas_size)
         self.__mask_shape = None
@@ -440,7 +450,7 @@ class BasePixelation(BaseImage):
     def mask_shape(self):
         """The cached mask shape"""
         if self.__mask_shape is None:
-            raise ValueError('No mask shape set yet!')
+            raise ValueError("No mask shape set yet!")
         #
         return self.__mask_shape
 
@@ -460,7 +470,8 @@ class BasePixelation(BaseImage):
         return self.lazy_evaluation(
             self.kw_px_area,
             self.get_pixelated_area,
-            clear_on_miss=self.kw_result)
+            clear_on_miss=self.kw_result,
+        )
 
     @property
     def result(self):
@@ -478,8 +489,7 @@ class BasePixelation(BaseImage):
         raise NotImplementedError
 
     def get_result(self):
-        """Return the result
-        """
+        """Return the result"""
         raise NotImplementedError
 
 
@@ -492,7 +502,7 @@ class ImagePixelation(BasePixelation):
 
     def get_mask(self):
         """Return the mask for the pixelated image"""
-        px_mask = Image.new('L', self.original.size, color=0)
+        px_mask = Image.new("L", self.original.size, color=0)
         px_mask.paste(self.mask_shape, box=self.shape_offset)
         return px_mask
 
@@ -503,11 +513,9 @@ class ImagePixelation(BasePixelation):
         return pixelated(self.original, tilesize=self.tilesize)
 
     def get_result(self):
-        """Return the result
-        """
+        """Return the result"""
         result_image = self.original.copy()
-        result_image.paste(
-            self.pixelated_area, box=None, mask=self.mask)
+        result_image.paste(self.pixelated_area, box=None, mask=self.mask)
         return result_image
 
 
@@ -527,26 +535,27 @@ class FramePixelation(BasePixelation):
         return self.mask_shape
 
     def get_pixelated_area(self):
-        """Return a pixelated area of the original image
-        """
+        """Return a pixelated area of the original image"""
         (offset_x, offset_y) = self.shape_offset
-        box = (offset_x,
-               offset_y,
-               offset_x + self.mask_shape.width,
-               offset_y + self.mask_shape.height)
+        box = (
+            offset_x,
+            offset_y,
+            offset_x + self.mask_shape.width,
+            offset_y + self.mask_shape.height,
+        )
         # logging.debug('Pixelation box: %r', box)
         # logging.debug('Pixelation width: %r', self.mask_shape.width)
         # logging.debug('Pixelation height: %r', self.mask_shape.height)
         return pixelated(self.original, box=box, tilesize=self.tilesize)
 
     def get_result(self):
-        """Return the result
-        """
+        """Return the result"""
         result_image = self.original.copy()
         # logging.debug('Pixelated size: %r', self.pixelated_area.size)
         # logging.debug('Mask size: %r', self.mask.size)
         result_image.paste(
-            self.pixelated_area, box=self.shape_offset, mask=self.mask)
+            self.pixelated_area, box=self.shape_offset, mask=self.mask
+        )
         return result_image
 
 
@@ -554,14 +563,13 @@ class MultiFramePixelation:
 
     """Pixelate a frames sequence"""
 
-    def __init__(self,
-                 source_path,
-                 target_path,
-                 file_name_pattern=FRAME_PATTERN):
+    def __init__(
+        self, source_path, target_path, file_name_pattern=FRAME_PATTERN
+    ):
         """Check if both directories exist"""
         for current_path in (source_path, target_path):
             if not current_path.is_dir():
-                raise ValueError('%s is not a directory!')
+                raise ValueError("%s is not a directory!")
             #
         #
         # pylint: disable=pointless-statement ; Test for valid pattern
@@ -585,37 +593,41 @@ class MultiFramePixelation:
         start and end must be Namespaces or dicts
         containing frame, center_x, center_y, width and height
         """
-        start_frame = start['frame']
-        end_frame = end['frame']
+        start_frame = start["frame"]
+        end_frame = end["frame"]
         frames_diff = end_frame - start_frame
         if frames_diff < 1:
-            raise ValueError(
-                'The end frame must be after the start frame!')
+            raise ValueError("The end frame must be after the start frame!")
         #
         self.start = start
         self.gradients = dict()
-        for item in ('center_x', 'center_y', 'width', 'height'):
+        for item in ("center_x", "center_y", "width", "height"):
             self.gradients[item] = Fraction(
-                end[item] - start[item], frames_diff)
+                end[item] - start[item], frames_diff
+            )
         #
         for current_frame in range(start_frame, end_frame + 1):
             file_name = self.pattern % current_frame
             source_frame = FramePixelation(
                 self.source_path / file_name,
                 canvas_size=None,
-                tilesize=tilesize)
+                tilesize=tilesize,
+            )
             offset = current_frame - start_frame
             source_frame.set_shape(
                 (
-                    self.get_intermediate_value('center_x', offset),
-                    self.get_intermediate_value('center_y', offset)),
+                    self.get_intermediate_value("center_x", offset),
+                    self.get_intermediate_value("center_y", offset),
+                ),
                 shape,
                 (
-                    self.get_intermediate_value('width', offset),
-                    self.get_intermediate_value('height', offset)))
+                    self.get_intermediate_value("width", offset),
+                    self.get_intermediate_value("height", offset),
+                ),
+            )
             source_frame.result.save(
-                self.target_path / file_name,
-                quality=quality)
+                self.target_path / file_name, quality=quality
+            )
             # logging.debug('Saved pixelated frame# %r', current_frame)
             yield round(Fraction(100 * (offset + 1), (frames_diff + 1)))
         #

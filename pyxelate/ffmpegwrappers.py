@@ -43,23 +43,21 @@ from queue import Queue
 
 
 SUBPROCESS_DEFAULTS = dict(
-    close_fds=True,
-    stderr=subprocess.PIPE,
-    stdout=subprocess.PIPE)
+    close_fds=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE
+)
 
-if sys.platform == 'win32':
-    del SUBPROCESS_DEFAULTS['close_fds']
+if sys.platform == "win32":
+    del SUBPROCESS_DEFAULTS["close_fds"]
 #
 
-FFMPEG = 'ffmpeg'
-FFPROBE = 'ffprobe'
+FFMPEG = "ffmpeg"
+FFPROBE = "ffprobe"
 
-DEFAULT_LOGLEVEL = 'error'
-DEFAULT_STREAM = 'v'
-DEFAULT_ENTRIES = \
-    'stream=index,avg_frame_rate,r_frame_rate,duration,nb_frames'
-DEFAULT_OUTPUT_FORMAT = 'default=noprint_wrappers=1'
-ENTRIES_ALL = 'stream'
+DEFAULT_LOGLEVEL = "error"
+DEFAULT_STREAM = "v"
+DEFAULT_ENTRIES = "stream=index,avg_frame_rate,r_frame_rate,duration,nb_frames"
+DEFAULT_OUTPUT_FORMAT = "default=noprint_wrappers=1"
+ENTRIES_ALL = "stream"
 
 
 #
@@ -110,7 +108,7 @@ class ProcessWrapper:
 
     """Process wrapper base class"""
 
-    default_executable = 'Executable not set'
+    default_executable = "Executable not set"
 
     def __init__(self, *arguments, executable=None):
         """Store the arguments and the executable"""
@@ -123,7 +121,7 @@ class ProcessWrapper:
     def command(self):
         """Executable followed by extra and normal arguments"""
         cmd = [self.__executable] + self.__extra + self.__arguments
-        logging.debug('Command: %r', cmd)
+        logging.debug("Command: %r", cmd)
         return cmd
 
     def add_extra_arguments(self, *extra_arguments):
@@ -137,7 +135,7 @@ class ProcessWrapper:
     def __prevent_repeated_execution(self):
         """Prevent repeated execution"""
         if self.result:
-            raise ValueError('The process has already been executed!')
+            raise ValueError("The process has already been executed!")
         #
 
     def run(self, check=True, **kwargs):
@@ -146,8 +144,7 @@ class ProcessWrapper:
         """
         self.__prevent_repeated_execution()
         kwargs.update(SUBPROCESS_DEFAULTS)
-        self.result = subprocess.run(
-            self.command, check=check, **kwargs)
+        self.result = subprocess.run(self.command, check=check, **kwargs)
         return self.result
 
     def stream(self, check=True, **kwargs):
@@ -173,7 +170,7 @@ class ProcessWrapper:
                 collected_stdout.append(line)
                 yield line.decode().rstrip()
                 #
-            time.sleep(.1)
+            time.sleep(0.1)
         # Cleanup:
         # Wait for the threads to end and close the file descriptors
         stderr_reader.join()
@@ -183,8 +180,9 @@ class ProcessWrapper:
         self.result = subprocess.CompletedProcess(
             args=process.args,
             returncode=process.wait(),
-            stdout=b'\n'.join(collected_stdout),
-            stderr=b'\n'.join(collected_stderr))
+            stdout=b"\n".join(collected_stdout),
+            stderr=b"\n".join(collected_stderr),
+        )
         if check:
             self.result.check_returncode()
         #
@@ -198,7 +196,7 @@ class FFmpegWrapper(ProcessWrapper):
 
     def stream(self, check=True, **kwargs):
         """Set extra arguments"""
-        self.add_extra_arguments('-progress', '-')
+        self.add_extra_arguments("-progress", "-")
         return super().stream(check=check, **kwargs)
 
 
@@ -207,25 +205,31 @@ class FFmpegWrapper(ProcessWrapper):
 #
 
 
-def get_stream_info(file_path,
-                    ffprobe_executable=FFPROBE,
-                    select_streams=DEFAULT_STREAM,
-                    show_entries=DEFAULT_ENTRIES,
-                    output_format=DEFAULT_OUTPUT_FORMAT):
+def get_stream_info(
+    file_path,
+    ffprobe_executable=FFPROBE,
+    select_streams=DEFAULT_STREAM,
+    show_entries=DEFAULT_ENTRIES,
+    output_format=DEFAULT_OUTPUT_FORMAT,
+):
     """Return a dict containing the selected entries"""
     ffprobe_exec = ProcessWrapper(
-        '-select_streams', select_streams,
-        '-show_entries', show_entries,
-        '-of', output_format,
+        "-select_streams",
+        select_streams,
+        "-show_entries",
+        show_entries,
+        "-of",
+        output_format,
         str(file_path),
-        executable=ffprobe_executable)
-    ffprobe_exec.add_extra_arguments('-loglevel', DEFAULT_LOGLEVEL)
+        executable=ffprobe_executable,
+    )
+    ffprobe_exec.add_extra_arguments("-loglevel", DEFAULT_LOGLEVEL)
     ffprobe_result = ffprobe_exec.run(check=True)
     stream_info = {}
     for line in ffprobe_result.stdout.decode().splitlines():
-        key, value = line.split('=', 1)
+        key, value = line.split("=", 1)
         stream_info[key] = value
-        logging.debug('Read %r = %r', key, value)
+        logging.debug("Read %r = %r", key, value)
     #
     return stream_info
 
@@ -236,19 +240,23 @@ def count_all_frames(file_path, ffmpeg_executable=FFMPEG):
     """
     read_data = {}
     ffmpeg_exec = FFmpegWrapper(
-        '-i', str(file_path),
-        '-f', 'rawvideo',
-        '-y', os.devnull,
-        executable=ffmpeg_executable)
-    ffmpeg_exec.add_extra_arguments('-loglevel', DEFAULT_LOGLEVEL)
+        "-i",
+        str(file_path),
+        "-f",
+        "rawvideo",
+        "-y",
+        os.devnull,
+        executable=ffmpeg_executable,
+    )
+    ffmpeg_exec.add_extra_arguments("-loglevel", DEFAULT_LOGLEVEL)
     try:
         for line in ffmpeg_exec.stream(check=True):
-            if line == 'progress=continue':
+            if line == "progress=continue":
                 read_data.clear()
                 continue
             #
             try:
-                (key, value) = line.split('=', 1)
+                (key, value) = line.split("=", 1)
             except ValueError:
                 continue
             #

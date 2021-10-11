@@ -34,9 +34,9 @@ from pyxelate import pixelations
 #
 
 
-SCRIPT_NAME = 'Partially pixelate an image'
-HOMEPAGE = 'https://github.com/blackstream-x/pyxelate'
-MAIN_WINDOW_TITLE = 'pyxelate: partially pixelate an image'
+SCRIPT_NAME = "Partially pixelate an image"
+HOMEPAGE = "https://github.com/blackstream-x/pyxelate"
+MAIN_WINDOW_TITLE = "pyxelate: partially pixelate an image"
 
 SCRIPT_PATH = pathlib.Path(os.path.realpath(sys.argv[0]))
 # Follow symlinks
@@ -44,7 +44,7 @@ if SCRIPT_PATH.is_symlink():
     SCRIPT_PATH = SCRIPT_PATH.readlink()
 #
 
-LICENSE_PATH = SCRIPT_PATH.parent / 'LICENSE'
+LICENSE_PATH = SCRIPT_PATH.parent / "LICENSE"
 COPYRIGHT_NOTICE = """Copyright (C) 2021 Rainer Schwarzbach
 
 This file is part of pyxelate.
@@ -63,23 +63,20 @@ You should have received a copy of the GNU General Public License
 along with pyxelate (see LICENSE).
 If not, see <http://www.gnu.org/licenses/>."""
 
-VERSION_PATH = SCRIPT_PATH.parent / 'version.txt'
+VERSION_PATH = SCRIPT_PATH.parent / "version.txt"
 try:
     VERSION = VERSION_PATH.read_text().strip()
 except OSError as error:
-    VERSION = '(Version file is missing: %s)' % error
+    VERSION = "(Version file is missing: %s)" % error
 #
 
 # Phases
-OPEN_FILE = 'open_file'
-SELECT_AREA = 'select_area'
+OPEN_FILE = "open_file"
+SELECT_AREA = "select_area"
 
-PHASES = (
-    OPEN_FILE,
-    SELECT_AREA)
+PHASES = (OPEN_FILE, SELECT_AREA)
 
-PANEL_NAMES = {
-    SELECT_AREA: 'Select area to be pixelated'}
+PANEL_NAMES = {SELECT_AREA: "Select area to be pixelated"}
 
 
 UNDO_SIZE = 20
@@ -95,7 +92,7 @@ CANVAS_HEIGHT = 640
 
 def get_widget_state(widget):
     """Get a widget state"""
-    return widget.cget('state')
+    return widget.cget("state")
 
 
 def reconfigure_widget(widget, **kwargs):
@@ -117,18 +114,25 @@ class FrozenSelection:
 
     """Store a selection state"""
 
-    variables = ('center_x', 'center_y', 'width', 'height',
-                 'shape', 'tilesize')
+    variables = (
+        "center_x",
+        "center_y",
+        "width",
+        "height",
+        "shape",
+        "tilesize",
+    )
 
     def __init__(self, selection):
         """Initialize values from the variables in the
         provided selection app.Namespace of tkinter variables
         """
-        self.original_values = {key: selection[key].get()
-                                for key in self.variables}
+        self.original_values = {
+            key: selection[key].get() for key in self.variables
+        }
         self.effective_values = dict(self.original_values)
-        if self.effective_values['shape'] in core.QUADRATIC_SHAPES:
-            self.effective_values['height'] = self.effective_values['width']
+        if self.effective_values["shape"] in core.QUADRATIC_SHAPES:
+            self.effective_values["height"] = self.effective_values["width"]
         #
 
     def restore_to(self, px_image):
@@ -148,7 +152,9 @@ class FrozenSelection:
         #
         return True
 
-    def __str__(self,):
+    def __str__(
+        self,
+    ):
         """Effective selection representation"""
         return repr(tuple(self.effective_values.values()))
 
@@ -165,10 +171,11 @@ class ImageCallbacks(core.Callbacks):
             desired_undo_state = tkinter.DISABLED
         #
         gui.set_state(self.widgets.buttons.undo, desired_undo_state)
-        for button_name in ('apply', 'save'):
+        for button_name in ("apply", "save"):
             gui.set_state(
                 self.widgets.buttons[button_name],
-                self.tkvars.buttonstate[button_name].get())
+                self.tkvars.buttonstate[button_name].get(),
+            )
         #
 
     def update_selection(self, *unused_arguments):
@@ -185,18 +192,17 @@ class Panels(core.Panels):
 
     """Panels and panel components"""
 
-    def component_image_info(self,
-                             parent_frame,
-                             frame_position,
-                             change_enabled=False):
+    def component_image_info(
+        self, parent_frame, frame_position, change_enabled=False
+    ):
         """Show information about the current video frame"""
-        self.ui_instance.heading_with_help_button(
-            parent_frame, 'Display')
+        self.ui_instance.heading_with_help_button(parent_frame, "Display")
         if self.vars.image.display_ratio > 1:
-            scale_factor = 'Size: scaled down (factor: %r)' % float(
-                self.vars.image.display_ratio)
+            scale_factor = "Size: scaled down (factor: %r)" % float(
+                self.vars.image.display_ratio
+            )
         else:
-            scale_factor = 'Size: original dimensions'
+            scale_factor = "Size: original dimensions"
         #
         label = tkinter.Label(parent_frame, text=scale_factor)
         label.grid(sticky=tkinter.W, columnspan=4)
@@ -219,12 +225,14 @@ class ImageUI(core.UserInterface):
         """Set interface pugin classes and initialize super class"""
         self.callback_class = ImageCallbacks
         self.panel_class = Panels
-        super().__init__(file_path,
-                         options,
-                         SCRIPT_PATH,
-                         canvas_width=CANVAS_WIDTH,
-                         canvas_height=CANVAS_HEIGHT,
-                         window_title=MAIN_WINDOW_TITLE)
+        super().__init__(
+            file_path,
+            options,
+            SCRIPT_PATH,
+            canvas_width=CANVAS_WIDTH,
+            canvas_height=CANVAS_HEIGHT,
+            window_title=MAIN_WINDOW_TITLE,
+        )
 
     def additional_variables(self):
         """Subclass-specific post-initialization
@@ -232,19 +240,26 @@ class ImageUI(core.UserInterface):
         """
         super().additional_variables()
         open_support, save_support = pixelations.get_supported_extensions()
-        logging.debug('File formats open support: %r', open_support)
-        logging.debug('File formats save support: %r', save_support)
+        logging.debug("File formats open support: %r", open_support)
+        logging.debug("File formats save support: %r", save_support)
         self.vars.update(
             core.Namespace(
                 open_support=sorted(open_support),
-                save_support=sorted(save_support)))
+                save_support=sorted(save_support),
+            )
+        )
         self.tkvars.update(
             core.Namespace(
                 buttonstate=core.Namespace(
                     apply=self.callbacks.get_traced_stringvar(
-                        'update_buttons', value=tkinter.NORMAL),
+                        "update_buttons", value=tkinter.NORMAL
+                    ),
                     save=self.callbacks.get_traced_stringvar(
-                        'update_buttons', value=tkinter.NORMAL))))
+                        "update_buttons", value=tkinter.NORMAL
+                    ),
+                )
+            )
+        )
         #
 
     def additional_widgets(self):
@@ -253,26 +268,28 @@ class ImageUI(core.UserInterface):
         """
         self.widgets.update(
             core.Namespace(
-                buttons=core.Namespace(
-                    undo=None,
-                    apply=None,
-                    save=None)))
+                buttons=core.Namespace(undo=None, apply=None, save=None)
+            )
+        )
         #
 
     def apply_pixelation(self):
         """Apply changes to the image"""
         # Append the current state to the undo buffer
         self.vars.undo_buffer.append(
-            (self.vars.image.original,
-             FrozenSelection(self.tkvars.selection),
-             self.vars.unapplied_changes))
+            (
+                self.vars.image.original,
+                FrozenSelection(self.tkvars.selection),
+                self.vars.unapplied_changes,
+            )
+        )
         if len(self.vars.undo_buffer) > UNDO_SIZE:
             del self.vars.undo_buffer[:-UNDO_SIZE]
         #
         # Visual feedback
-        self.draw_indicator(stipple='gray75')
+        self.draw_indicator(stipple="gray75")
         self.main_window.update_idletasks()
-        time.sleep(.2)
+        time.sleep(0.2)
         self.draw_indicator()
         self.vars.image.set_original(self.vars.image.result)
         self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
@@ -284,8 +301,10 @@ class ImageUI(core.UserInterface):
         """Return True if the file is a supported file,
         False if not
         """
-        if self.vars.open_support and \
-                file_path.suffix not in self.vars.open_support:
+        if (
+            self.vars.open_support
+            and file_path.suffix not in self.vars.open_support
+        ):
             return False
         #
         return True
@@ -297,14 +316,15 @@ class ImageUI(core.UserInterface):
         try:
             last_applied_selection = self.vars.undo_buffer[-1][1]
         except IndexError:
-            logging.debug('No last applied selection!')
+            logging.debug("No last applied selection!")
         else:
             current_selection = FrozenSelection(self.tkvars.selection)
-            logging.debug('Last applied selection: %s', last_applied_selection)
-            logging.debug('Current selection:      %s', current_selection)
+            logging.debug("Last applied selection: %s", last_applied_selection)
+            logging.debug("Current selection:      %s", current_selection)
             logging.debug(
-                'Selections are equal: %r',
-                current_selection == last_applied_selection)
+                "Selections are equal: %r",
+                current_selection == last_applied_selection,
+            )
         #
         if self.vars.unapplied_changes:
             if not ask_to_apply:
@@ -316,9 +336,10 @@ class ImageUI(core.UserInterface):
                 default_answer = messagebox.NO
             #
             if messagebox.askyesno(
-                    'Not yet applied changes',
-                    'Pixelate the current selection before saving?',
-                    default=default_answer):
+                "Not yet applied changes",
+                "Pixelate the current selection before saving?",
+                default=default_answer,
+            ):
                 self.apply_pixelation()
             #
         #
@@ -328,7 +349,8 @@ class ImageUI(core.UserInterface):
         """Load the image"""
         self.vars.image = pixelations.ImagePixelation(
             file_path,
-            canvas_size=(self.vars.canvas_width, self.vars.canvas_height))
+            canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
+        )
         # set selection sizes and reduce them
         # to the image dimensions if necessary
         (im_width, im_height) = self.vars.image.original.size
@@ -336,9 +358,7 @@ class ImageUI(core.UserInterface):
         sel_width = self.tkvars.selection.width.get()
         if not sel_width:
             # Set initial selection width to 20% of image width
-            sel_width = max(
-                core.INITIAL_SELECTION_SIZE,
-                round(im_width / 5))
+            sel_width = max(core.INITIAL_SELECTION_SIZE, round(im_width / 5))
         #
         sel_height = self.tkvars.selection.height.get()
         if not sel_height:
@@ -348,15 +368,15 @@ class ImageUI(core.UserInterface):
             center_x=im_width // 2,
             center_y=im_height // 2,
             width=min(sel_width, im_width),
-            height=min(sel_height, im_height))
+            height=min(sel_height, im_height),
+        )
         # set the shape
         if not self.tkvars.selection.shape.get():
             self.tkvars.selection.shape.set(core.OVAL)
         #
         # set tilesize
         if not self.tkvars.selection.tilesize.get():
-            self.tkvars.selection.tilesize.set(
-                pixelations.DEFAULT_TILESIZE)
+            self.tkvars.selection.tilesize.set(pixelations.DEFAULT_TILESIZE)
         #
         # set the show_preview variable by default
         self.tkvars.show_preview.set(1)
@@ -372,12 +392,13 @@ class ImageUI(core.UserInterface):
         before exitiong the application
         """
         if self.__get_save_recommendation(ask_to_apply=False):
-            if messagebox.askyesno('Unsaved Changes', 'Save your changes?'):
+            if messagebox.askyesno("Unsaved Changes", "Save your changes?"):
                 if not self.save_file():
                     if not messagebox.askokcancel(
-                            'Changes not saved!',
-                            'Really exit without saving?',
-                            default=messagebox.CANCEL):
+                        "Changes not saved!",
+                        "Really exit without saving?",
+                        default=messagebox.CANCEL,
+                    ):
                         return False
                     #
                 #
@@ -401,9 +422,9 @@ class ImageUI(core.UserInterface):
         previous_selection.restore_to(self.tkvars.selection)
         self.vars.trace = True
         self.pixelate_selection()
-        self.draw_indicator(stipple='error')
+        self.draw_indicator(stipple="error")
         self.main_window.update_idletasks()
-        time.sleep(.2)
+        time.sleep(0.2)
         self.draw_indicator()
         self.vars.unapplied_changes = unapplied_changes
         self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
@@ -413,23 +434,25 @@ class ImageUI(core.UserInterface):
         return True if the file was saved
         """
         if not self.__get_save_recommendation(ask_to_apply=True):
-            messagebox.showinfo(
-                'Image unchanged', 'Nothing to save.')
+            messagebox.showinfo("Image unchanged", "Nothing to save.")
             return False
         #
         original_suffix = self.vars.original_path.suffix
-        filetypes = [('Supported image files', f'*{suffix}') for suffix
-                     in self.vars.save_support] + [('All files', '*.*')]
+        filetypes = [
+            ("Supported image files", f"*{suffix}")
+            for suffix in self.vars.save_support
+        ] + [("All files", "*.*")]
         selected_file = filedialog.asksaveasfilename(
             initialdir=str(self.vars.original_path.parent),
             defaultextension=original_suffix,
             filetypes=filetypes,
             parent=self.main_window,
-            title='Save pixelated image as…')
+            title="Save pixelated image as…",
+        )
         if not selected_file:
             return False
         #
-        logging.debug('Saving the file as %r', selected_file)
+        logging.debug("Saving the file as %r", selected_file)
         #  save the file and reset the "touched" flag
         self.vars.image.original.save(selected_file)
         self.vars.original_path = pathlib.Path(selected_file)
@@ -444,24 +467,22 @@ class ImageUI(core.UserInterface):
         """Additional buttons for the pixelate_image script"""
         self.widgets.buttons.undo = tkinter.Button(
             buttons_area,
-            text='\u238c Undo',
-            command=self.revert_last_pixelation)
+            text="\u238c Undo",
+            command=self.revert_last_pixelation,
+        )
         self.widgets.buttons.undo.grid(row=0, column=0, **buttons_grid)
         self.widgets.buttons.apply = tkinter.Button(
-            buttons_area,
-            text='\u2713 Apply',
-            command=self.apply_pixelation)
+            buttons_area, text="\u2713 Apply", command=self.apply_pixelation
+        )
         self.widgets.buttons.apply.grid(row=0, column=1, **buttons_grid)
         try:
             self.widgets.buttons.save = tkinter.Button(
-                buttons_area,
-                text='\U0001f5ab Save',
-                command=self.save_file)
+                buttons_area, text="\U0001f5ab Save", command=self.save_file
+            )
         except tkinter.TclError:
             self.widgets.buttons.save = tkinter.Button(
-                buttons_area,
-                text='\u2386 Save',
-                command=self.save_file)
+                buttons_area, text="\u2386 Save", command=self.save_file
+            )
         #
         self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
         self.callbacks.update_buttons()
@@ -476,34 +497,41 @@ class ImageUI(core.UserInterface):
 def __get_arguments():
     """Parse command line arguments"""
     argument_parser = argparse.ArgumentParser(
-        description='Pixelate an area of an image')
+        description="Pixelate an area of an image"
+    )
     argument_parser.set_defaults(loglevel=logging.INFO)
     argument_parser.add_argument(
-        '-v', '--verbose',
-        action='store_const',
+        "-v",
+        "--verbose",
+        action="store_const",
         const=logging.DEBUG,
-        dest='loglevel',
-        help='Output all messages including debug level')
+        dest="loglevel",
+        help="Output all messages including debug level",
+    )
     argument_parser.add_argument(
-        '-q', '--quiet',
-        action='store_const',
+        "-q",
+        "--quiet",
+        action="store_const",
         const=logging.WARNING,
-        dest='loglevel',
-        help='Limit message output to warnings and errors')
+        dest="loglevel",
+        help="Limit message output to warnings and errors",
+    )
     argument_parser.add_argument(
-        'image_file',
-        nargs='?',
+        "image_file",
+        nargs="?",
         type=pathlib.Path,
-        help='An image file. If none is provided,'
-        ' the script will ask for a file.')
+        help="An image file. If none is provided,"
+        " the script will ask for a file.",
+    )
     return argument_parser.parse_args()
 
 
 def main(arguments):
     """Main script function"""
     logging.basicConfig(
-        format='%(levelname)-8s\u2551 %(funcName)s → %(message)s',
-        level=arguments.loglevel)
+        format="%(levelname)-8s\u2551 %(funcName)s → %(message)s",
+        level=arguments.loglevel,
+    )
     selected_file = arguments.image_file
     if selected_file and not selected_file.is_file():
         selected_file = None
@@ -511,7 +539,7 @@ def main(arguments):
     ImageUI(selected_file, arguments)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(__get_arguments()))
 
 
