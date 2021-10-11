@@ -83,7 +83,7 @@ def set_state(widget, new_state):
     """Update a widget state if required"""
     try:
         old_state = get_widget_state(widget)
-    except AttributeError:
+    except (AttributeError, tkinter.TclError):
         return
     #
     if old_state == new_state:
