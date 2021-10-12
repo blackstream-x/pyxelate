@@ -1206,7 +1206,47 @@ class VideoUI(core.UserInterface):
         finally:
             progress.action_cancel()
         #
+        if not self.__show_in_default_player(str(file_path)):
+            messagebox.showinfo(
+                "Video saved",
+                f"The video has been saved as {file_path}",
+                icon=messagebox.INFO,
+                parent=self.main_window,
+            )
+        #
         self.vars.unsaved_changes = False
+        return True
+
+    def __show_in_default_player(self, full_file_name):
+        """If showing the video in the default player is possible,
+        ask to do that (and do it after a positive answer).
+        Return True if it is possible, False if not.
+        """
+        show_video_command = "xdg-open"
+        shell = False
+        if sys.platform == "win32":
+            show_video_command = "start"
+            shell = True
+        else:
+            try:
+                subprocess.run((show_video_command, "--version"), check=True)
+            except subprocess.CalledProcessError:
+                return False
+            #
+        #
+        show_video = messagebox.askyesno(
+            "Video saved",
+            "Show the video in your default player now?",
+            icon=messagebox.QUESTION,
+            parent=self.main_window,
+        )
+        if show_video:
+            subprocess.run(
+                (show_video_command, full_file_name),
+                shell=shell,
+                check=True,
+            )
+        #
         return True
 
 
