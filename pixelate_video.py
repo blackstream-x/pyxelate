@@ -41,7 +41,6 @@ from pyxelate import pixelations
 
 SCRIPT_NAME = "Partially pixelate a video clip"
 HOMEPAGE = "https://github.com/blackstream-x/pyxelate"
-MAIN_WINDOW_TITLE = "pyxelate: partially pixelate a video clip"
 
 SCRIPT_PATH = pathlib.Path(os.path.realpath(sys.argv[0]))
 # Follow symlinks
@@ -98,7 +97,7 @@ PANEL_NAMES = {
     START_AREA: "Select pixelation start area",
     END_FRAME: "Select pixelation end frame",
     END_AREA: "Select pixelation end area",
-    PREVIEW: "preview",
+    PREVIEW: "Preview the video stream",
 }
 
 EMPTY_SELECTION = dict(
@@ -421,7 +420,7 @@ class Panels(core.Panels):
             self.widgets.action_area, **core.WITH_BORDER
         )
         self.component_frames_slider(image_frame, position)
-        image_frame.grid(row=0, column=0, rowspan=3, **core.GRID_FULLWIDTH)
+        image_frame.grid(row=1, column=0, rowspan=3, **core.GRID_FULLWIDTH)
         self.sidebar_frameselection(position)
         # logging.debug(
         #     '%s frame# is %r', position, self.tkvars.current_frame.get())
@@ -579,7 +578,9 @@ class Panels(core.Panels):
         )
         # self.component_drag_options(frameselection_frame)
         frameselection_frame.columnconfigure(4, weight=100)
-        frameselection_frame.grid(row=0, column=1, **core.GRID_FULLWIDTH)
+        frameselection_frame.grid(
+            row=0, column=1, rowspan=2, **core.GRID_FULLWIDTH
+        )
 
     # Panels in order of appearance
 
@@ -618,7 +619,7 @@ class Panels(core.Panels):
             self.widgets.action_area, **core.WITH_BORDER
         )
         self.component_frames_slider(image_frame, "Current")
-        image_frame.grid(row=0, column=0, rowspan=3, **core.GRID_FULLWIDTH)
+        image_frame.grid(row=1, column=0, rowspan=3, **core.GRID_FULLWIDTH)
         sidebar_frame = tkinter.Frame(
             self.widgets.action_area, **core.WITH_BORDER
         )
@@ -630,7 +631,7 @@ class Panels(core.Panels):
         self.component_export_settings(sidebar_frame)
         self.component_drag_options(sidebar_frame)
         sidebar_frame.columnconfigure(4, weight=100)
-        sidebar_frame.grid(row=0, column=1, **core.GRID_FULLWIDTH)
+        sidebar_frame.grid(row=0, column=1, rowspan=2, **core.GRID_FULLWIDTH)
 
 
 class Rollbacks(core.InterfacePlugin):
@@ -705,23 +706,24 @@ class VideoUI(core.UserInterface):
     """Modular user interface for video pixelation"""
 
     phases = PHASES
+    panel_names = PANEL_NAMES
     script_name = SCRIPT_NAME
     version = VERSION
     copyright_notice = COPYRIGHT_NOTICE
 
+    action_class = Actions
+    callback_class = VideoCallbacks
+    panel_class = Panels
+    rollback_class = Rollbacks
+
     def __init__(self, file_path, options):
-        """Initialize super class"""
-        self.action_class = Actions
-        self.callback_class = VideoCallbacks
-        self.panel_class = Panels
-        self.rollback_class = Rollbacks
+        """Initialize the super class"""
         super().__init__(
             file_path,
             options,
             SCRIPT_PATH,
             canvas_width=CANVAS_WIDTH,
             canvas_height=CANVAS_HEIGHT,
-            window_title=MAIN_WINDOW_TITLE,
         )
 
     def additional_variables(self):

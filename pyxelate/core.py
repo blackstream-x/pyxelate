@@ -812,7 +812,7 @@ class Panels(InterfacePlugin):
         self.widgets.canvas.bind(
             "<B1-Motion>", self.ui_instance.callbacks.drag_move
         )
-        image_frame.grid(row=0, column=0, rowspan=3, **GRID_FULLWIDTH)
+        image_frame.grid(row=1, column=0, rowspan=3, **GRID_FULLWIDTH)
         self.sidebar_settings(
             frame_position,
             change_enabled=change_enabled,
@@ -875,7 +875,7 @@ class Panels(InterfacePlugin):
         )
         drag_opts.grid(sticky=tkinter.W, column=0, columnspan=4)
         settings_frame.columnconfigure(4, weight=100)
-        settings_frame.grid(row=0, column=1, **GRID_FULLWIDTH)
+        settings_frame.grid(row=0, column=1, rowspan=2, **GRID_FULLWIDTH)
         self.ui_instance.toggle_height()
 
 
@@ -886,6 +886,10 @@ class UserInterface:
     phase_open_file = "open_file"
     phase_select_area = "select_area"
     phases = (phase_open_file, phase_select_area)
+    panel_names = {
+        phase_open_file: "Open file",
+        phase_select_area: "Select area …",
+    }
 
     action_class = InterfacePlugin
     callback_class = Callbacks
@@ -908,12 +912,11 @@ class UserInterface:
         script_path,
         canvas_width=900,
         canvas_height=640,
-        window_title="Base UI",
     ):
         """Build the GUI"""
         self.options = options
         self.main_window = tkinter.Tk()
-        self.main_window.title(f"pyxelate: {window_title}")
+        self.main_window.title(f"pyxelate: {self.script_name}")
         self.vars = Namespace(
             current_panel=None,
             errors=[],
@@ -1355,6 +1358,15 @@ class UserInterface:
         #
         self.__show_errors()
         logging.debug("Showing panel %r", self.vars.current_panel)
+        gui.Heading(
+            self.widgets.action_area,
+            text=self.panel_names[self.vars.current_panel],
+            row=0,
+            column=0,
+            # **GRID_FULLWIDTH,
+            sticky=tkinter.E + tkinter.W,
+            **WITH_BORDER,
+        )
         panel_method()
         self.widgets.action_area.grid(**GRID_FULLWIDTH)
         #
@@ -1374,8 +1386,8 @@ class UserInterface:
             buttons_area, text="\u23fb Quit", command=self.quit
         )
         quit_button.grid(row=last_row, column=2, **buttons_grid)
-        self.widgets.action_area.rowconfigure(1, weight=100)
-        buttons_area.grid(row=2, column=1, sticky=tkinter.E)
+        self.widgets.action_area.rowconfigure(2, weight=100)
+        buttons_area.grid(row=3, column=1, sticky=tkinter.E)
         self.main_window.bind_all(
             "<KeyPress-Prior>", self.callbacks.previous_drag_action
         )

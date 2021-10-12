@@ -36,7 +36,6 @@ from pyxelate import pixelations
 
 SCRIPT_NAME = "Partially pixelate an image"
 HOMEPAGE = "https://github.com/blackstream-x/pyxelate"
-MAIN_WINDOW_TITLE = "pyxelate: partially pixelate an image"
 
 SCRIPT_PATH = pathlib.Path(os.path.realpath(sys.argv[0]))
 # Follow symlinks
@@ -219,21 +218,22 @@ class ImageUI(core.UserInterface):
     """Modular user interface for image pixelation"""
 
     phases = PHASES
+    panel_names = PANEL_NAMES
     script_name = SCRIPT_NAME
     version = VERSION
     copyright_notice = COPYRIGHT_NOTICE
 
+    callback_class = ImageCallbacks
+    panel_class = Panels
+
     def __init__(self, file_path, options):
-        """Set interface pugin classes and initialize super class"""
-        self.callback_class = ImageCallbacks
-        self.panel_class = Panels
+        """Initialize super class"""
         super().__init__(
             file_path,
             options,
             SCRIPT_PATH,
             canvas_width=CANVAS_WIDTH,
             canvas_height=CANVAS_HEIGHT,
-            window_title=MAIN_WINDOW_TITLE,
         )
 
     def additional_variables(self):
