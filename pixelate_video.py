@@ -137,75 +137,10 @@ CANVAS_HEIGHT = 576
 
 DEFAULT_TILESIZE = 10
 
-#
-# Helper Functions
-#
-
-
-def get_widget_state(widget):
-    """Get a widget state"""
-    return widget.cget("state")
-
-
-def reconfigure_widget(widget, **kwargs):
-    """Reconfigure a widget, avoiding eceptions
-    for nonexisting widgets
-    """
-    if not widget:
-        return
-    #
-    widget.config(**kwargs)
-
 
 #
 # Classes
 #
-
-
-class Namespace(dict):
-
-    # pylint: disable=too-many-instance-attributes
-
-    """A dict subclass that exposes its items as attributes.
-
-    Warning: Namespace instances only have direct access to the
-    attributes defined in the visible_attributes tuple
-    """
-
-    visible_attributes = ("items",)
-
-    def __repr__(self):
-        """Object representation"""
-        return "{0}({1})".format(type(self).__name__, super().__repr__())
-
-    def __dir__(self):
-        """Members sequence"""
-        return tuple(self)
-
-    def __getattribute__(self, name):
-        """Access a visible attribute
-        or return an existing dict member
-        """
-        if name in type(self).visible_attributes:
-            return object.__getattribute__(self, name)
-        #
-        try:
-            return self[name]
-        except KeyError as error:
-            raise AttributeError(
-                "{0!r} object has no attribute {1!r}".format(
-                    type(self).__name__, name
-                )
-            ) from error
-        #
-
-    def __setattr__(self, name, value):
-        """Set an attribute"""
-        self[name] = value
-
-    def __delattr__(self, name):
-        """Delete an attribute"""
-        del self[name]
 
 
 class FramesCache:

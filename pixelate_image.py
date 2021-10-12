@@ -86,26 +86,6 @@ CANVAS_HEIGHT = 640
 
 
 #
-# Helper Functions
-#
-
-
-def get_widget_state(widget):
-    """Get a widget state"""
-    return widget.cget("state")
-
-
-def reconfigure_widget(widget, **kwargs):
-    """Reconfigure a widget, avoiding eceptions
-    for nonexisting widgets
-    """
-    if not widget:
-        return
-    #
-    widget.config(**kwargs)
-
-
-#
 # Classes
 #
 
