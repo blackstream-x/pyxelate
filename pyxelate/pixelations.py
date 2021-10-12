@@ -297,6 +297,7 @@ class BaseImage:
 
         self.__cache = {}
         self.__canvas_size = None
+        self.__crop_area = {}
         self.set_canvas_size(canvas_size)
         self.load_image(image_path)
         #
@@ -335,6 +336,71 @@ class BaseImage:
             self.cache_remove(self.kw_display_ratio)
             self.cache_remove(self.kw_tk_original)
         #
+
+    def remove_crop_area(self):
+        """Remove the crop area"""
+        self.__crop_area.clear()
+        self.cache_remove(self.kw_tk_original)
+
+    def set_crop_area(self, sizes):
+        """Set the crop area according to the sizes dict"""
+        for (lower_side, upper_side) in (("left", "right"), ("top", "bottom")):
+            if sizes[upper_side] < sizes[lower_side]:
+                sizes[upper_side] = sizes[lower_side]
+            #
+        #
+        for side in ("left", "top"):
+            if sizes[side] < 0:
+                sizes[side] = 0
+            #
+        #
+        for (side, limit) in (
+            ("right", self.original.width),
+            ("bottom", self.original.height),
+        ):
+            if sizes[side] > limit:
+                sizes[side] = limit
+            #
+        #
+        # Validation
+        for (lower_side, upper_side) in (("left", "right"), ("top", "bottom")):
+            if sizes[upper_side] < sizes[lower_side]:
+                message = "Cannot set crop area %r!" % sizes
+                self.remove_crop_area()
+                raise ValueError(message)
+            #
+        #
+        for (key, value) in sizes.items():
+            self.__crop_area[key] = value
+        #
+        self.cache_remove(self.kw_tk_original)
+
+    @property
+    def crop_box(self):
+        """The crop box if defined.
+        Raises an AttributeError if the crop box is not defined
+        """
+        try:
+            return (
+                self.__crop_area["left"],
+                self.__crop_area["top"],
+                self.__crop_area["right"],
+                self.__crop_area["bottom"],
+            )
+        except KeyError as error:
+            raise AttributeError("No crop box defined!") from error
+        #
+
+    @property
+    def cropped_original(self):
+        """The cropped original image"""
+        try:
+            box = self.crop_box
+        except AttributeError:
+            # No crop
+            return self.original
+        #
+        return self.original.crop(box)
 
     @property
     def display_ratio(self):
@@ -401,7 +467,26 @@ class BaseImage:
         if not source_image:
             source_image = self.original
         #
-        return ImageTk.PhotoImage(self.downsized_to_canvas(source_image))
+        return ImageTk.PhotoImage(
+            self.downsized_to_canvas(self.get_crop_preview(source_image))
+        )
+
+    def get_crop_preview(self, source_image):
+        """Return a crop preview of the source image
+        (cropped areas are darkened)
+        """
+        try:
+            box = self.crop_box
+        except AttributeError:
+            return source_image
+        #
+        preview_image = source_image.copy()
+        passepartout = Image.new("RGB", preview_image.size, color=0)
+        pp_mask = Image.new("L", source_image.size, color=128)
+        draw = ImageDraw.Draw(pp_mask)
+        draw.rectangle(box, fill=0)
+        preview_image.paste(passepartout, mask=pp_mask)
+        return preview_image
 
 
 class BasePixelation(BaseImage):
@@ -410,7 +495,6 @@ class BasePixelation(BaseImage):
 
     kw_px_area = "pixelated image area"
     kw_px_mask = "pixelated area mask"
-    # kw_mask_shape = 'mask_shape'
     kw_result = "resulting image"
 
     def __init__(

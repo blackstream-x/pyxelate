@@ -43,8 +43,8 @@
     "move the selection": "Grab the selection with the mouse and move it around",
     "resize the selection": "Resize the selection",
     "create a new selection": "create a new selection anywhere in the image",
-    "select the crop area": "(tba) define the area to which the video will be cropped",
+    "select the crop area": "define the area to which the video will be cropped",
     "resize the crop area": "(tba) resize the area to which the video will be cropped",
-    "move the zoomed image": "(tba) move the image when parts are outside of the canvas"
+    "pan the (zoomed) image": "(tba) move the image when parts are outside of the canvas"
   }
 }

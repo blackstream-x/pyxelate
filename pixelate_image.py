@@ -143,6 +143,13 @@ class ImageCallbacks(core.Callbacks):
 
     """Callbacks for the new user interface"""
 
+    def toggle_crop_display(self, *unused_arguments):
+        """Toggle crop area preview update
+        and re-enable the "save" button
+        """
+        super().toggle_crop_display(*unused_arguments)
+        self.tkvars.buttonstate.save.set(tkinter.NORMAL)
+
     def update_buttons(self, *unused_arguments):
         """Trigger undo, apply and save button states changes"""
         if self.vars.undo_buffer:
@@ -186,6 +193,21 @@ class Panels(core.Panels):
         #
         label = tkinter.Label(parent_frame, text=scale_factor)
         label.grid(sticky=tkinter.W, columnspan=4)
+        #
+        label = tkinter.Label(parent_frame, text="Crop:")
+        preview_active = tkinter.Checkbutton(
+            parent_frame,
+            text="crop the image",
+            variable=self.tkvars.crop,
+            indicatoron=1,
+        )
+        label.grid(sticky=tkinter.W, column=0)
+        preview_active.grid(
+            sticky=tkinter.W,
+            row=gui.grid_row_of(label),
+            column=1,
+            columnspan=3,
+        )
 
     def select_area(self):
         """Panel for the "Select area" phase"""
@@ -434,7 +456,7 @@ class ImageUI(core.UserInterface):
         #
         logging.debug("Saving the file as %r", selected_file)
         #  save the file and reset the "touched" flag
-        self.vars.image.original.save(selected_file)
+        self.vars.image.cropped_original.save(selected_file)
         self.vars.original_path = pathlib.Path(selected_file)
         self.tkvars.file_name.set(self.vars.original_path.name)
         self.vars.undo_buffer.clear()

@@ -88,21 +88,23 @@ POSSIBLE_INDICATOR_COLORS = (
 
 # Items drawn on the canvas
 INDICATOR = "indicator"
-NEW_SELECTION = "new_selection"
+RUBBERBAND = "rubberband"
 
 # Mouse drag actions (“Drag with the mouse on the canvas to …”)
 MOVE_SELECTION = "move the selection"
 RESIZE_SELECTION = "resize the selection"
-CREATE_NEW_SELECTION = "create a new selection"
-NEW_CROP_AREA = "select the crop area"
+NEW_SELECTION = "create a new selection"
+MOVE_CROP_AREA = "move the crop area"
 RESIZE_CROP_AREA = "resize the crop area"
-MOVE_ZOOMED_IMAGE = "move the zoomed image"
+NEW_CROP_AREA = "select the crop area"
+PAN_ZOOMED_IMAGE = "pan the (zoomed) image"
 
 MOUSE_DRAG_ACTIONS = (
     # Contains all implemented drag actions
     MOVE_SELECTION,
     RESIZE_SELECTION,
-    CREATE_NEW_SELECTION,
+    NEW_SELECTION,
+    NEW_CROP_AREA,
 )
 
 # Grid parameters
@@ -235,14 +237,12 @@ class Callbacks(InterfacePlugin):
 
     """Callback methods"""
 
-    def __init__(self, ui_instance):
-        """Store the ui_instance"""
-        super().__init__(ui_instance)
-        self.drag_registry = {
-            MOVE_SELECTION: "move_sel",
-            RESIZE_SELECTION: "resize_sel",
-            CREATE_NEW_SELECTION: "new_sel",
-        }
+    drag_registry = {
+        MOVE_SELECTION: "move_sel",
+        RESIZE_SELECTION: "resize_sel",
+        NEW_SELECTION: "new_sel",
+        NEW_CROP_AREA: "new_crop",
+    }
 
     def __clicked_inside_indicator(self, event):
         """Return True if the click was inside the indicator"""
@@ -250,6 +250,7 @@ class Callbacks(InterfacePlugin):
             (left, top, right, bottom) = self.widgets.canvas.bbox(INDICATOR)
         except TypeError as error:
             logging.debug(error)
+            return False
         #
         x_position = event.x
         y_position = event.y
@@ -274,17 +275,30 @@ class Callbacks(InterfacePlugin):
         #
         return False
 
-    def __get_bbox_selection(self, tag_name):
+    def __get_translated_bbox(self, tag_name):
+        """Get the bbox coordinates
+        calculated from display to image size.
+        Return a tuple of (left, top, right, bottom).
+        """
+        (left, top, right, bottom) = self.widgets.canvas.bbox(tag_name)
+        return (
+            self.vars.image.from_display_size(left),
+            self.vars.image.from_display_size(top),
+            self.vars.image.from_display_size(right),
+            self.vars.image.from_display_size(bottom),
+        )
+
+    def __get_selection_coordinates(self, tag_name):
         """Get the bbox selection as a Namespace with the
         selection coordinates (center and dimensions),
         calculated from display to image size.
         Return a tuple of (width, height, center_x, center_y)
         """
-        left, top, right, bottom = self.widgets.canvas.bbox(tag_name)
-        width = self.vars.image.from_display_size(right - left)
-        height = self.vars.image.from_display_size(bottom - top)
-        center_x = self.vars.image.from_display_size((left + right) // 2)
-        center_y = self.vars.image.from_display_size((top + bottom) // 2)
+        (left, top, right, bottom) = self.__get_translated_bbox(tag_name)
+        width = right - left
+        height = bottom - top
+        center_x = (left + right) // 2
+        center_y = (top + bottom) // 2
         return (width, height, center_x, center_y)
 
     def get_traced_intvar(self, method_name, value=None):
@@ -353,7 +367,7 @@ class Callbacks(InterfacePlugin):
         self.vars.drag_data.x = current_x
         self.vars.drag_data.y = current_y
         # Update the selection (position only)
-        (center_x, center_y) = self.__get_bbox_selection(INDICATOR)[-2:]
+        (center_x, center_y) = self.__get_selection_coordinates(INDICATOR)[-2:]
         self.ui_instance.update_selection(center_x=center_x, center_y=center_y)
         self.ui_instance.pixelate_selection()
         return True
@@ -391,7 +405,7 @@ class Callbacks(InterfacePlugin):
     def new_sel_drag_start(self, event):
         """Begin dragging for a new selection"""
         # record the item and its location
-        self.vars.drag_data.item = NEW_SELECTION
+        self.vars.drag_data.item = RUBBERBAND
         self.vars.drag_data.x = event.x
         self.vars.drag_data.y = event.y
         return True
@@ -399,14 +413,17 @@ class Callbacks(InterfacePlugin):
     def new_sel_drag_stop(self, *unused_event):
         """End drag for a new selection"""
         try:
-            (width, height, center_x, center_y) = self.__get_bbox_selection(
-                NEW_SELECTION
-            )
+            (
+                width,
+                height,
+                center_x,
+                center_y,
+            ) = self.__get_selection_coordinates(RUBBERBAND)
         except TypeError:
             # No selection dragged (i.e. click without dragging)
             return False
         #
-        self.widgets.canvas.delete(NEW_SELECTION)
+        self.widgets.canvas.delete(RUBBERBAND)
         # Adjust to minimum sizes
         if width < MINIMUM_SELECTION_SIZE:
             width = MINIMUM_SELECTION_SIZE
@@ -422,6 +439,48 @@ class Callbacks(InterfacePlugin):
         self.update_selection()
         # Snap back the drag action to safe selection moving
         self.tkvars.drag_action.set(MOVE_SELECTION)
+        return True
+
+    def new_crop_drag_move(self, event):
+        """Drag a new crop area"""
+        [left, right] = sorted((event.x, self.vars.drag_data.x))
+        [top, bottom] = sorted((event.y, self.vars.drag_data.y))
+        self.widgets.canvas.delete(RUBBERBAND)
+        current_color = self.tkvars.indicator.drag_color.get()
+        self.widgets.canvas.create_rectangle(
+            left,
+            top,
+            right,
+            bottom,
+            outline=current_color,
+            tags=RUBBERBAND,
+        )
+        return True
+
+    def new_crop_drag_start(self, event):
+        """Begin dragging for a new crop area"""
+        self.vars.drag_data.item = RUBBERBAND
+        self.vars.drag_data.x = event.x
+        self.vars.drag_data.y = event.y
+        return True
+
+    def new_crop_drag_stop(self, *unused_event):
+        """End drag for a new crop area"""
+        try:
+            (left, top, right, bottom) = self.__get_translated_bbox(RUBBERBAND)
+        except TypeError:
+            # No selection dragged (i.e. click without dragging)
+            return False
+        #
+        self.widgets.canvas.delete(RUBBERBAND)
+        # previous_crop_area = self.vars.crop_area
+        self.vars.crop_area.update(
+            dict(left=left, top=top, right=right, bottom=bottom)
+        )
+        # Switch the "crop" checkbox to "on",
+        # triggering  the toggle_crop_display method implicitly
+        # TODO: error handling
+        self.tkvars.crop.set(1)
         return True
 
     def resize_sel_drag_move(self, event):
@@ -440,7 +499,7 @@ class Callbacks(InterfacePlugin):
     def resize_sel_drag_start(self, event):
         """Begin dragging for selection resize"""
         # record the item and its location
-        self.vars.drag_data.item = NEW_SELECTION
+        self.vars.drag_data.item = RUBBERBAND
         self.vars.drag_data.x = event.x
         self.vars.drag_data.y = event.y
         (left, top, right, bottom) = self.widgets.canvas.bbox(INDICATOR)
@@ -491,7 +550,7 @@ class Callbacks(InterfacePlugin):
             #
         #
         # Draw a new selection outline
-        self.widgets.canvas.delete(NEW_SELECTION)
+        self.widgets.canvas.delete(RUBBERBAND)
         outer_dash = (1, 1)
         shape = self.tkvars.selection.shape.get()
         current_color = self.tkvars.indicator.drag_color.get()
@@ -505,7 +564,7 @@ class Callbacks(InterfacePlugin):
             bottom,
             dash=outer_dash,
             outline=current_color,
-            tags=NEW_SELECTION,
+            tags=RUBBERBAND,
         )
         if shape in ELLIPTIC_SHAPES:
             self.widgets.canvas.create_oval(
@@ -515,11 +574,11 @@ class Callbacks(InterfacePlugin):
                 bottom,
                 dash=(1, 1),
                 outline=current_color,
-                tags=NEW_SELECTION,
+                tags=RUBBERBAND,
             )
         # Update the selection
-        (width, height, center_x, center_y) = self.__get_bbox_selection(
-            NEW_SELECTION
+        (width, height, center_x, center_y) = self.__get_selection_coordinates(
+            RUBBERBAND
         )
         self.ui_instance.update_selection(
             center_x=center_x, center_y=center_y, width=width, height=height
@@ -533,6 +592,33 @@ class Callbacks(InterfacePlugin):
         except AttributeError as error:
             logging.warning("%s", error)
         #
+
+    def reset_crop_area(self):
+        """Reset the crop area to the full image
+        and set the crop checkbox to "off"
+        """
+        try:
+            (width, height) = self.vars.image.size
+        except AttributeError as error:
+            logging.error("Could not reset the crop area: %s", error)
+        else:
+            self.vars.crop_area.update(
+                dict(left=0, top=0, right=width, bottom=height)
+            )
+        #
+        self.tkvars.crop.set(0)
+
+    def toggle_crop_display(self, *unused_arguments):
+        """Toggle crop area preview update"""
+        if not self.vars.trace:
+            return
+        #
+        if self.tkvars.crop.get():
+            self.vars.image.set_crop_area(self.vars.crop_area)
+        else:
+            self.vars.image.remove_crop_area()
+        #
+        self.toggle_preview()
 
     def toggle_preview(self, *unused_arguments):
         """Trigger preview update"""
@@ -842,6 +928,7 @@ class UserInterface:
             drag_data=Namespace(
                 x=0, y=0, anchor_x=0, anchor_y=0, var_x=0, var_y=0, item=None
             ),
+            crop_area=Namespace(left=0, top=0, right=0, bottom=0),
         )
         self.tkvars = Namespace(
             file_name=tkinter.StringVar(),
@@ -905,6 +992,9 @@ class UserInterface:
                         "redraw_indicator", value="red"
                     ),
                     drag_color=tkinter.StringVar(),
+                ),
+                crop=self.callbacks.get_traced_intvar(
+                    "toggle_crop_display", value=0
                 ),
             )
         )
@@ -1018,7 +1108,7 @@ class UserInterface:
         )
         help_button.grid(
             row=gui.grid_row_of(heading),
-            column=heading_column_span + 1,
+            column=heading_column_span,
             sticky=tkinter.E,
         )
 

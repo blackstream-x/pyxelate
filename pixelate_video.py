@@ -19,7 +19,6 @@ import pathlib
 import subprocess
 import sys
 import tempfile
-import time
 import tkinter
 
 from fractions import Fraction
@@ -143,72 +142,6 @@ DEFAULT_TILESIZE = 10
 #
 
 
-class FramesCache:
-
-    """Cache frames"""
-
-    def __init__(
-        self,
-        directories=(None, None),
-        canvas_size=(CANVAS_WIDTH, CANVAS_HEIGHT),
-        limit=20,
-        file_name_pattern=FRAME_PATTERN,
-    ):
-        """Set paths"""
-        self.primary_path = pathlib.Path(directories[0])
-        self.secondary_path = pathlib.Path(directories[1])
-        for current_path in (self.primary_path, self.secondary_path):
-            if not current_path.is_dir():
-                raise ValueError("%s is not a directory!")
-            #
-        #
-        # pylint: disable=pointless-statement ; Test for valid pattern
-        file_name_pattern % 1
-        # pylint: enable
-        self.canvas_size = canvas_size
-        self.pattern = file_name_pattern
-        self.limit = limit
-        self.__cache = dict()
-        self.__age = dict()
-
-    def pop(self, frame_number):
-        """Return the image for the number"""
-        try:
-            tk_image = self.__cache.pop(frame_number)
-        except KeyError:
-            return self.get_tk_image(frame_number)
-        #
-        self.__age.pop(frame_number, None)
-        return tk_image
-
-    def get_tk_image(self, frame_number):
-        """Read the frame from disk"""
-        frame_file = self.pattern % frame_number
-        for base_path in (self.primary_path, self.secondary_path):
-            frame_path = base_path / frame_file
-            if frame_path.is_file():
-                break
-            #
-        else:
-            raise ValueError("Frame %s not found" % frame_number)
-        #
-        vframe = pixelations.BaseImage(
-            frame_path, canvas_size=self.canvas_size
-        )
-        return vframe.tk_original
-
-    def preload(self, frame_number):
-        """Load a frame into the cache"""
-        if frame_number not in self.__cache:
-            self.__cache[frame_number] = self.get_tk_image(frame_number)
-            self.__age[frame_number] = time.time()
-        #
-        if len(self.__cache) > self.limit:
-            # TODO: delete oldest content
-            logging.warning("Cache above limit!")
-        #
-
-
 class Actions(core.InterfacePlugin):
 
     """Pre-panel actions for the video GUI in sequential order"""
@@ -218,6 +151,7 @@ class Actions(core.InterfacePlugin):
         Set frame range from the first to the last but 5th frame.
         """
         self.ui_instance.adjust_frame_limits(maximum=self.vars.nb_frames - 5)
+        self.tkvars.drag_action.set(core.NEW_CROP_AREA)
 
     def start_area(self):
         """Actions before showing the start area selection panel:
@@ -232,6 +166,9 @@ class Actions(core.InterfacePlugin):
             / self.vars.frame_file,
             canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
         )
+        if self.tkvars.crop.get():
+            self.vars.image.set_crop_area(self.vars.crop_area)
+        #
         # Set selection (pre-configured or empty)
         self.ui_instance.adjust_selection(self.vars.end_at)
         (im_width, im_height) = self.vars.image.original.size
@@ -251,15 +188,10 @@ class Actions(core.InterfacePlugin):
             center_y=center_y,
             width=min(sel_width, im_width),
             height=min(sel_height, im_height),
+            shape=self.tkvars.selection.shape.get() or core.OVAL,
+            tilesize=self.tkvars.selection.tilesize.get() or DEFAULT_TILESIZE,
         )
-        # set the shape
-        if not self.tkvars.selection.shape.get():
-            self.tkvars.selection.shape.set(core.OVAL)
-        #
-        # set tilesize
-        if not self.tkvars.selection.tilesize.get():
-            self.tkvars.selection.tilesize.set(DEFAULT_TILESIZE)
-        #
+        self.tkvars.drag_action.set(core.MOVE_SELECTION)
         # set the show_preview variable by default
         self.tkvars.show_preview.set(1)
 
@@ -277,6 +209,7 @@ class Actions(core.InterfacePlugin):
         #
         logging.debug("Fix start coordinates:")
         self.ui_instance.store_selection(self.vars.start_at)
+        self.tkvars.drag_action.set(core.NEW_CROP_AREA)
 
     def end_area(self):
         """Actions before showing the end area selection panel:
@@ -292,6 +225,10 @@ class Actions(core.InterfacePlugin):
             / self.vars.frame_file,
             canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
         )
+        if self.tkvars.crop.get():
+            self.vars.image.set_crop_area(self.vars.crop_area)
+        #
+        self.tkvars.drag_action.set(core.MOVE_SELECTION)
 
     def preview(self):
         """Actions before showing the preview panel:
@@ -333,16 +270,8 @@ class Actions(core.InterfacePlugin):
         #
         progress.action_cancel()
         self.vars.unsaved_changes = True
-        self.vars.frames_cache = FramesCache(
-            directories=(
-                self.vars.modified_frames.name,
-                self.vars.original_frames.name,
-            ),
-            canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
-            limit=20,
-        )
         self.ui_instance.adjust_frame_limits()
-        # self.ui_instance.adjust_current_frame(1)
+        self.tkvars.drag_action.set(core.NEW_CROP_AREA)
 
 
 class VideoCallbacks(core.Callbacks):
@@ -355,7 +284,7 @@ class VideoCallbacks(core.Callbacks):
             return
         #
         try:
-            self.widgets.frame_canvas.delete("vframe")
+            self.widgets.canvas.delete("vframe")
         except AttributeError as error:
             logging.warning("%s", error)
         except tkinter.TclError as error:
@@ -381,21 +310,30 @@ class VideoCallbacks(core.Callbacks):
             self.tkvars.current_frame.set(current_frame)
         #
         self.vars.trace = True
+        self.vars.frame_file = FRAME_PATTERN % current_frame
+        frame_path = (
+            pathlib.Path(self.vars.original_frames.name) / self.vars.frame_file
+        )
         if self.vars.current_panel == PREVIEW:
-            self.vars.tk_image = self.vars.frames_cache.pop(current_frame)
-        else:
-            self.vars.frame_file = FRAME_PATTERN % current_frame
-            self.vars.vframe = pixelations.BaseImage(
-                pathlib.Path(self.vars.original_frames.name)
-                / self.vars.frame_file,
-                canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
+            modified_path = (
+                pathlib.Path(self.vars.modified_frames.name)
+                / self.vars.frame_file
             )
-            self.vars.tk_image = self.vars.vframe.tk_original
+            if modified_path.is_file():
+                frame_path = modified_path
+            #
         #
-        self.widgets.frame_canvas.create_image(
+        self.vars.vframe = pixelations.BaseImage(
+            frame_path,
+            canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
+        )
+        if self.tkvars.crop.get():
+            self.vars.vframe.set_crop_area(self.vars.crop_area)
+        #
+        self.vars.tk_image = self.vars.vframe.tk_original
+        self.widgets.canvas.create_image(
             0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags="vframe"
         )
-        #
 
     def change_frame_from_text(self, *unused_arguments):
         """Trigger a change of the frame"""
@@ -406,6 +344,17 @@ class VideoCallbacks(core.Callbacks):
             int(self.tkvars.current_frame_text.get())
         )
         #
+
+    def toggle_crop_display(self, *unused_arguments):
+        """Toggle crop area preview update"""
+        if not self.vars.trace:
+            return
+        #
+        if self.vars.current_panel in (PREVIEW, START_FRAME, END_FRAME):
+            self.change_frame()
+            return
+        #
+        super().toggle_crop_display(*unused_arguments)
 
     def update_buttons(self, *unused_arguments):
         """Trigger previous, next and save button states changes"""
@@ -441,13 +390,25 @@ class Panels(core.Panels):
         )
         self.widgets.frames_slider.grid()
         logging.debug("Showing canvas")
-        self.widgets.frame_canvas = tkinter.Canvas(
+        self.widgets.canvas = tkinter.Canvas(
             image_frame,
             width=self.vars.canvas_width,
             height=self.vars.canvas_height,
         )
-        self.widgets.frame_canvas.grid()
+        self.widgets.canvas.grid()
         self.vars.trace = True
+        if self.vars.current_panel == PREVIEW:
+            # add bindings (for crop area definition)
+            self.widgets.canvas.bind(
+                "<ButtonPress-1>", self.ui_instance.callbacks.drag_start
+            )
+            self.widgets.canvas.bind(
+                "<ButtonRelease-1>", self.ui_instance.callbacks.drag_stop
+            )
+            self.widgets.canvas.bind(
+                "<B1-Motion>", self.ui_instance.callbacks.drag_move
+            )
+        #
         self.ui_instance.callbacks.change_frame()
 
     def component_frameselection(self, position):
@@ -477,6 +438,18 @@ class Panels(core.Panels):
         )
         more_button.grid(sticky=tkinter.W, columnspan=4)
 
+    def component_drag_options(self, parent_frame):
+        """Show the drag options selector"""
+        self.ui_instance.heading_with_help_button(
+            parent_frame, "Drag on the canvas to"
+        )
+        drag_opts = tkinter.OptionMenu(
+            parent_frame,
+            self.tkvars.drag_action,
+            core.NEW_CROP_AREA,
+        )
+        drag_opts.grid(sticky=tkinter.W, column=0, columnspan=4)
+
     def component_export_settings(self, sidebar_frame):
         """Section with the export settings"""
         # Disabe "include audio" if the original video
@@ -494,8 +467,7 @@ class Panels(core.Panels):
         label = tkinter.Label(sidebar_frame, text="Audio:")
         include_audio = tkinter.Checkbutton(
             sidebar_frame,
-            command=self.ui_instance.show_image,
-            text="active",
+            text="include original",
             variable=self.tkvars.export.include_audio,
             indicatoron=1,
             state=include_audio_state,
@@ -580,6 +552,21 @@ class Panels(core.Panels):
         #
         label = tkinter.Label(parent_frame, text=scale_factor)
         label.grid(sticky=tkinter.W, columnspan=4)
+        #
+        label = tkinter.Label(parent_frame, text="Crop:")
+        preview_active = tkinter.Checkbutton(
+            parent_frame,
+            text="crop the video",
+            variable=self.tkvars.crop,
+            indicatoron=1,
+        )
+        label.grid(sticky=tkinter.W, column=0)
+        preview_active.grid(
+            sticky=tkinter.W,
+            row=gui.grid_row_of(label),
+            column=1,
+            columnspan=3,
+        )
 
     def sidebar_frameselection(self, frame_position):
         """Show the settings frame"""
@@ -590,6 +577,7 @@ class Panels(core.Panels):
         self.component_image_info(
             frameselection_frame, frame_position, change_enabled=True
         )
+        # self.component_drag_options(frameselection_frame)
         frameselection_frame.columnconfigure(4, weight=100)
         frameselection_frame.grid(row=0, column=1, **core.GRID_FULLWIDTH)
 
@@ -640,6 +628,7 @@ class Panels(core.Panels):
         )
         self.component_add_another(sidebar_frame)
         self.component_export_settings(sidebar_frame)
+        self.component_drag_options(sidebar_frame)
         sidebar_frame.columnconfigure(4, weight=100)
         sidebar_frame.grid(row=0, column=1, **core.GRID_FULLWIDTH)
 
@@ -1177,6 +1166,18 @@ class VideoUI(core.UserInterface):
                 ]
             )
         #
+        if self.tkvars.crop.get():
+            width = self.vars.crop_area.right - self.vars.crop_area.left
+            height = self.vars.crop_area.bottom - self.vars.crop_area.top
+            crop_filter = "crop=w=%s:h=%s:x=%s:y=%s," % (
+                width,
+                height,
+                self.vars.crop_area.left,
+                self.vars.crop_area.top,
+            )
+        else:
+            crop_filter = ""
+        #
         arguments.extend(
             [
                 "-c:v",
@@ -1186,7 +1187,7 @@ class VideoUI(core.UserInterface):
                 "-crf",
                 str(self.tkvars.export.crf.get()),
                 "-vf",
-                f"fps={self.vars.frame_rate},format=yuv420p",
+                f"fps={self.vars.frame_rate},{crop_filter}format=yuv420p",
                 "-y",
                 str(file_path),
             ]
