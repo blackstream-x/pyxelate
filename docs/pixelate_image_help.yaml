@@ -11,10 +11,14 @@ Global:
 
 Original file:
   The first line: shows the name of the current image file
-  The button: allows loading another image file
+  Choose another file: |
+    When you click this button, you can load another image file.
 
-Display:
-  Size: shows the scaling factor of the loaded image
+Image:
+  Zoom factor: shows the zoom factor of the loaded image
+  Crop video: |
+    If selected, the image will be cropped when saving.
+    The darkened frame will be cut off.
 
 Selection:
   Selection: |
@@ -33,20 +37,12 @@ Selection:
     For “quadratic” shapes (i.e. square and circle), the height will
     follow the width. Minimum is 20 pixels in each dimension.
   "Center at x/y": Fine-tune the selection center here.
-  Preview: |
+  Show preview: |
     Show or suppress the preview of the not-yet-applied pixelation.
     This might be useful if you are not sure whether you already applied
     the pixelation at the current position or not.
 
-Indicator colours:
+Colours:
   Change these colours for better contrast with the image:
-  Current: Colour of the current indicator
-  New: Colour of the “rubberband” shown when dragging a new selection
-
-Drag on the canvas to:
-  move the selection: Grab the selection with the mouse and move it around
-  resize the selection: Resize the selection
-  create a new selection: create a new selection anywhere in the image
-  select the crop area: define the area to which the image will be cropped
-  resize the crop area: (tba) resize the area to which the image will be cropped
-  "pan the (zoomed) image": (tba) move the image when parts are outside of the canvas
+  Indicator outline: Colour of the current indicator
+  Rubberband: Colour of the “rubberband”

@@ -150,7 +150,6 @@ class Actions(core.InterfacePlugin):
         Set frame range from the first to the last but 5th frame.
         """
         self.ui_instance.adjust_frame_limits(maximum=self.vars.nb_frames - 5)
-        self.tkvars.drag_action.set(core.NEW_CROP_AREA)
 
     def start_area(self):
         """Actions before showing the start area selection panel:
@@ -190,7 +189,7 @@ class Actions(core.InterfacePlugin):
             shape=self.tkvars.selection.shape.get() or core.OVAL,
             tilesize=self.tkvars.selection.tilesize.get() or DEFAULT_TILESIZE,
         )
-        self.tkvars.drag_action.set(core.MOVE_SELECTION)
+        self.tkvars.drag_action.set(self.vars.previous_drag_action)
         # set the show_preview variable by default
         self.tkvars.show_preview.set(1)
 
@@ -208,7 +207,6 @@ class Actions(core.InterfacePlugin):
         #
         logging.debug("Fix start coordinates:")
         self.ui_instance.store_selection(self.vars.start_at)
-        self.tkvars.drag_action.set(core.NEW_CROP_AREA)
 
     def end_area(self):
         """Actions before showing the end area selection panel:
@@ -227,7 +225,6 @@ class Actions(core.InterfacePlugin):
         if self.tkvars.crop.get():
             self.vars.image.set_crop_area(self.vars.crop_area)
         #
-        self.tkvars.drag_action.set(core.MOVE_SELECTION)
 
     def preview(self):
         """Actions before showing the preview panel:
@@ -270,6 +267,7 @@ class Actions(core.InterfacePlugin):
         progress.action_cancel()
         self.vars.unsaved_changes = True
         self.ui_instance.adjust_frame_limits()
+        self.vars.previous_drag_action = self.tkvars.drag_action.get()
         self.tkvars.drag_action.set(core.NEW_CROP_AREA)
 
 
@@ -407,6 +405,8 @@ class Panels(core.Panels):
             self.widgets.canvas.bind(
                 "<B1-Motion>", self.ui_instance.callbacks.drag_move
             )
+            # Set the canvas cursor
+            self.ui_instance.callbacks.set_canvas_cursor()
         #
         self.ui_instance.callbacks.change_frame()
 
@@ -437,18 +437,6 @@ class Panels(core.Panels):
         )
         more_button.grid(sticky=tkinter.W, columnspan=4)
 
-    def component_drag_options(self, parent_frame):
-        """Show the drag options selector"""
-        self.ui_instance.heading_with_help_button(
-            parent_frame, "Drag on the canvas to"
-        )
-        drag_opts = tkinter.OptionMenu(
-            parent_frame,
-            self.tkvars.drag_action,
-            core.NEW_CROP_AREA,
-        )
-        drag_opts.grid(sticky=tkinter.W, column=0, columnspan=4)
-
     def component_export_settings(self, sidebar_frame):
         """Section with the export settings"""
         # Disabe "include audio" if the original video
@@ -462,21 +450,6 @@ class Panels(core.Panels):
         #
         self.ui_instance.heading_with_help_button(
             sidebar_frame, "Export settings"
-        )
-        label = tkinter.Label(sidebar_frame, text="Audio:")
-        include_audio = tkinter.Checkbutton(
-            sidebar_frame,
-            text="include original",
-            variable=self.tkvars.export.include_audio,
-            indicatoron=1,
-            state=include_audio_state,
-        )
-        label.grid(sticky=tkinter.W, column=0)
-        include_audio.grid(
-            sticky=tkinter.W,
-            row=gui.grid_row_of(label),
-            column=1,
-            columnspan=3,
         )
         label = tkinter.Label(sidebar_frame, text="CRF:")
         crf = tkinter.Spinbox(
@@ -505,6 +478,19 @@ class Panels(core.Panels):
             row=gui.grid_row_of(label),
             column=1,
             columnspan=3,
+        )
+        include_audio = tkinter.Checkbutton(
+            sidebar_frame,
+            anchor=tkinter.W,
+            text="Include original audio",
+            variable=self.tkvars.export.include_audio,
+            indicatoron=1,
+            state=include_audio_state,
+        )
+        include_audio.grid(
+            sticky=tkinter.W,
+            column=0,
+            columnspan=5,
         )
 
     def component_image_info(
@@ -542,29 +528,20 @@ class Panels(core.Panels):
             column=1,
             row=gui.grid_row_of(label),
         )
-        if self.vars.vframe.display_ratio > 1:
-            scale_factor = "Size: scaled down (factor: %r)" % float(
-                self.vars.vframe.display_ratio
-            )
-        else:
-            scale_factor = "Size: original dimensions"
-        #
-        label = tkinter.Label(parent_frame, text=scale_factor)
-        label.grid(sticky=tkinter.W, columnspan=4)
-        #
-        label = tkinter.Label(parent_frame, text="Crop:")
-        preview_active = tkinter.Checkbutton(
+        self.component_zoom_factor(
+            parent_frame, self.vars.vframe.display_ratio
+        )
+        crop_active = tkinter.Checkbutton(
             parent_frame,
-            text="crop the video",
+            anchor=tkinter.W,
+            text="Crop video",
             variable=self.tkvars.crop,
             indicatoron=1,
         )
-        label.grid(sticky=tkinter.W, column=0)
-        preview_active.grid(
+        crop_active.grid(
             sticky=tkinter.W,
-            row=gui.grid_row_of(label),
-            column=1,
-            columnspan=3,
+            column=0,
+            columnspan=5,
         )
 
     def sidebar_frameselection(self, frame_position):
@@ -629,7 +606,9 @@ class Panels(core.Panels):
         )
         self.component_add_another(sidebar_frame)
         self.component_export_settings(sidebar_frame)
-        self.component_drag_options(sidebar_frame)
+        self.component_select_drag_action(
+            sidebar_frame, supported_actions=[core.NEW_CROP_AREA]
+        )
         sidebar_frame.columnconfigure(4, weight=100)
         sidebar_frame.grid(row=0, column=1, rowspan=2, **core.GRID_FULLWIDTH)
 
@@ -699,6 +678,7 @@ class Rollbacks(core.InterfacePlugin):
         self.vars.opxsf.pop()
         self.vars.spxsf = sorted(set(self.vars.opxsf))
         self.vars.modified_frames.cleanup()
+        self.tkvars.drag_action.set(self.vars.previous_drag_action)
 
 
 class VideoUI(core.UserInterface):
@@ -742,6 +722,7 @@ class VideoUI(core.UserInterface):
                 # (original sequence, and sorted unique)
                 opxsf=[],
                 spxsf=[],
+                previous_drag_action=core.MOVE_SELECTION,
                 frame_rate=None,
                 frames_cache=None,
                 duration_usec=None,

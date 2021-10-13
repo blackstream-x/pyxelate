@@ -99,13 +99,13 @@ RESIZE_CROP_AREA = "resize the crop area"
 NEW_CROP_AREA = "select the crop area"
 PAN_ZOOMED_IMAGE = "pan the (zoomed) image"
 
-MOUSE_DRAG_ACTIONS = (
-    # Contains all implemented drag actions
-    MOVE_SELECTION,
-    RESIZE_SELECTION,
-    NEW_SELECTION,
-    NEW_CROP_AREA,
-)
+MOUSE_DRAG_ACTIONS = {
+    # all implemented drag actions with their cursors
+    MOVE_SELECTION: "fleur",
+    RESIZE_SELECTION: "sizing",
+    NEW_SELECTION: "plus",
+    NEW_CROP_AREA: "icon",
+}
 
 # Grid parameters
 WITH_BORDER = dict(borderwidth=2, padx=5, pady=5, relief=tkinter.GROOVE)
@@ -315,28 +315,32 @@ class Callbacks(InterfacePlugin):
         """
         return gui.traced_variable(getattr(self, method_name), value=value)
 
-    def __execute_drag_method(self, event_type, event):
-        """Execute the method for the specified event type,
-        reading the drag_action variable
-        """
-        prefix = self.drag_registry[self.tkvars.drag_action.get()]
-        method = getattr(self, "%s_drag_%s" % (prefix, event_type))
-        return method(event)
-
     def next_drag_action(self, *unused_arguments):
-        """Select the next drag action"""
-        current_drag_action = self.tkvars.drag_action.get()
-        current_index = MOUSE_DRAG_ACTIONS.index(current_drag_action)
-        if current_index < len(MOUSE_DRAG_ACTIONS) - 1:
-            self.tkvars.drag_action.set(MOUSE_DRAG_ACTIONS[current_index + 1])
+        """Select the next supported drag action"""
+        all_drag_actions = list(MOUSE_DRAG_ACTIONS)
+        old_drag_action = self.tkvars.drag_action.get()
+        current_index = all_drag_actions.index(old_drag_action)
+        while current_index < len(all_drag_actions) - 1:
+            current_index = current_index + 1
+            new_drag_action = all_drag_actions[current_index]
+            if new_drag_action in self.vars.supported_drag_actions:
+                self.tkvars.drag_action.set(new_drag_action)
+                break
+            #
         #
 
     def previous_drag_action(self, *unused_arguments):
-        """Select the previous drag action"""
-        current_drag_action = self.tkvars.drag_action.get()
-        current_index = MOUSE_DRAG_ACTIONS.index(current_drag_action)
-        if current_index:
-            self.tkvars.drag_action.set(MOUSE_DRAG_ACTIONS[current_index - 1])
+        """Select the previous supported drag action"""
+        all_drag_actions = list(MOUSE_DRAG_ACTIONS)
+        old_drag_action = self.tkvars.drag_action.get()
+        current_index = all_drag_actions.index(old_drag_action)
+        while current_index:
+            current_index = current_index - 1
+            new_drag_action = all_drag_actions[current_index]
+            if new_drag_action in self.vars.supported_drag_actions:
+                self.tkvars.drag_action.set(new_drag_action)
+                break
+            #
         #
 
     def drag_move(self, event):
@@ -350,6 +354,14 @@ class Callbacks(InterfacePlugin):
     def drag_stop(self, event):
         """End drag"""
         return self.__execute_drag_method("stop", event)
+
+    def __execute_drag_method(self, event_type, event):
+        """Execute the method for the specified event type,
+        reading the drag_action variable
+        """
+        prefix = self.drag_registry[self.tkvars.drag_action.get()]
+        method = getattr(self, "%s_drag_%s" % (prefix, event_type))
+        return method(event)
 
     def move_sel_drag_move(self, event):
         """Handle dragging of the indicator"""
@@ -606,6 +618,15 @@ class Callbacks(InterfacePlugin):
         #
         self.tkvars.crop.set(0)
 
+    def set_canvas_cursor(self, *unused_arguments):
+        """Set the cursor shown over the canvas
+        to the maching cursor for the currently active drag action
+        """
+        gui.reconfigure_widget(
+            self.widgets.canvas,
+            cursor=MOUSE_DRAG_ACTIONS[self.tkvars.drag_action.get()],
+        )
+
     def toggle_crop_display(self, *unused_arguments):
         """Toggle crop area preview update"""
         if not self.vars.trace:
@@ -740,20 +761,18 @@ class Panels(InterfacePlugin):
         center_x.grid(sticky=tkinter.W, row=gui.grid_row_of(label), column=1)
         label_sep.grid(sticky=tkinter.W, row=gui.grid_row_of(label), column=2)
         center_y.grid(sticky=tkinter.W, row=gui.grid_row_of(label), column=3)
-        label = tkinter.Label(settings_frame, text="Preview:")
         preview_active = tkinter.Checkbutton(
             settings_frame,
+            anchor=tkinter.W,
             command=self.ui_instance.show_image,
-            text="active",
+            text="Show preview",
             variable=self.tkvars.show_preview,
             indicatoron=1,
         )
-        label.grid(sticky=tkinter.W, column=0)
         preview_active.grid(
             sticky=tkinter.W,
-            row=gui.grid_row_of(label),
-            column=1,
-            columnspan=3,
+            column=0,
+            columnspan=5,
         )
 
     def component_file_info(self, parent_frame):
@@ -777,11 +796,9 @@ class Panels(InterfacePlugin):
         raise NotImplementedError
 
     def component_indicator_colours(self, parent_frame):
-        """Show indicator colours selections"""
-        self.ui_instance.heading_with_help_button(
-            parent_frame, "Indicator colours"
-        )
-        label = tkinter.Label(parent_frame, text="Current:")
+        """Show colours selections"""
+        self.ui_instance.heading_with_help_button(parent_frame, "Colours")
+        label = tkinter.Label(parent_frame, text="Indicator outline:")
         color_opts = tkinter.OptionMenu(
             parent_frame,
             self.tkvars.indicator.color,
@@ -794,7 +811,7 @@ class Panels(InterfacePlugin):
             column=1,
             columnspan=3,
         )
-        label = tkinter.Label(parent_frame, text="New:")
+        label = tkinter.Label(parent_frame, text="Rubberband:")
         color_opts = tkinter.OptionMenu(
             parent_frame,
             self.tkvars.indicator.drag_color,
@@ -829,6 +846,7 @@ class Panels(InterfacePlugin):
             0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags="image"
         )
         self.widgets.canvas.grid()
+        self.ui_instance.callbacks.set_canvas_cursor()
         self.ui_instance.draw_indicator()
         self.ui_instance.pixelate_selection()
         self.vars.trace = True
@@ -850,6 +868,56 @@ class Panels(InterfacePlugin):
             allowed_shapes=allowed_shapes,
         )
 
+    def component_select_drag_action(
+        self, parent_frame, supported_actions=tuple(MOUSE_DRAG_ACTIONS)
+    ):
+        """Show colours selections"""
+        gui.Heading(
+            parent_frame,
+            text="Drag on the canvas to … (please select):",
+            sticky=tkinter.W,
+            columnspan=5,
+        )
+        self.vars.supported_drag_actions.clear()
+        for single_drag_action in supported_actions:
+            current_action = tkinter.Radiobutton(
+                parent_frame,
+                anchor=tkinter.W,
+                cursor=MOUSE_DRAG_ACTIONS[single_drag_action],
+                text=single_drag_action,
+                value=single_drag_action,
+                variable=self.tkvars.drag_action,
+            )
+            current_action.grid(sticky=tkinter.W, column=0, columnspan=5)
+            self.vars.supported_drag_actions.append(single_drag_action)
+        #
+
+    def component_zoom_factor(self, parent_frame, display_ratio):
+        """Show the zoom factor according to display ratio"""
+        if display_ratio == int(display_ratio):
+            factor = int(display_ratio)
+        else:
+            factor = float(display_ratio)
+        #
+        percentage = round(100 / display_ratio, 2)
+        if percentage == int(percentage):
+            percentage = int(percentage)
+        #
+        if display_ratio > 1:
+            zoom_factor = "%s%% (1:%s)" % (percentage, factor)
+        else:
+            zoom_factor = "100% (1:1)"
+        #
+        label = tkinter.Label(parent_frame, text="Zoom factor:")
+        label.grid(sticky=tkinter.W, column=0)
+        zoom_display = tkinter.Label(parent_frame, text=zoom_factor)
+        zoom_display.grid(
+            sticky=tkinter.W,
+            row=gui.grid_row_of(label),
+            column=1,
+            columnspan=4,
+        )
+
     def sidebar_settings(
         self,
         frame_position,
@@ -868,13 +936,7 @@ class Panels(InterfacePlugin):
             fixed_tilesize=fixed_tilesize,
             allowed_shapes=allowed_shapes,
         )
-        self.ui_instance.heading_with_help_button(
-            settings_frame, "Drag on the canvas to"
-        )
-        drag_opts = tkinter.OptionMenu(
-            settings_frame, self.tkvars.drag_action, *MOUSE_DRAG_ACTIONS
-        )
-        drag_opts.grid(sticky=tkinter.W, column=0, columnspan=4)
+        self.component_select_drag_action(settings_frame)
         settings_frame.columnconfigure(4, weight=100)
         settings_frame.grid(row=0, column=1, rowspan=2, **GRID_FULLWIDTH)
         self.ui_instance.toggle_height()
@@ -929,6 +991,7 @@ class UserInterface:
             trace=False,
             unapplied_changes=False,
             undo_buffer=[],
+            supported_drag_actions=[],
             drag_data=Namespace(
                 x=0, y=0, anchor_x=0, anchor_y=0, var_x=0, var_y=0, item=None
             ),
@@ -999,6 +1062,9 @@ class UserInterface:
                 ),
                 crop=self.callbacks.get_traced_intvar(
                     "toggle_crop_display", value=0
+                ),
+                drag_action=self.callbacks.get_traced_stringvar(
+                    "set_canvas_cursor", value=MOVE_SELECTION
                 ),
             )
         )

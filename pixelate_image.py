@@ -182,30 +182,20 @@ class Panels(core.Panels):
         self, parent_frame, frame_position, change_enabled=False
     ):
         """Show information about the current video frame"""
-        self.ui_instance.heading_with_help_button(parent_frame, "Display")
-        if self.vars.image.display_ratio > 1:
-            scale_factor = "Size: scaled down (factor: %r)" % float(
-                self.vars.image.display_ratio
-            )
-        else:
-            scale_factor = "Size: original dimensions"
+        self.ui_instance.heading_with_help_button(parent_frame, "Image")
         #
-        label = tkinter.Label(parent_frame, text=scale_factor)
-        label.grid(sticky=tkinter.W, columnspan=4)
-        #
-        label = tkinter.Label(parent_frame, text="Crop:")
-        preview_active = tkinter.Checkbutton(
+        self.component_zoom_factor(parent_frame, self.vars.image.display_ratio)
+        crop_active = tkinter.Checkbutton(
             parent_frame,
-            text="crop the image",
+            anchor=tkinter.W,
+            text="Crop image",
             variable=self.tkvars.crop,
             indicatoron=1,
         )
-        label.grid(sticky=tkinter.W, column=0)
-        preview_active.grid(
+        crop_active.grid(
             sticky=tkinter.W,
-            row=gui.grid_row_of(label),
-            column=1,
-            columnspan=3,
+            column=0,
+            columnspan=5,
         )
 
     def select_area(self):
