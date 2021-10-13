@@ -776,6 +776,38 @@ class Panels(InterfacePlugin):
         """Show information about the current image"""
         raise NotImplementedError
 
+    def component_indicator_colours(self, parent_frame):
+        """Show indicator colours selections"""
+        self.ui_instance.heading_with_help_button(
+            parent_frame, "Indicator colours"
+        )
+        label = tkinter.Label(parent_frame, text="Current:")
+        color_opts = tkinter.OptionMenu(
+            parent_frame,
+            self.tkvars.indicator.color,
+            *POSSIBLE_INDICATOR_COLORS,
+        )
+        label.grid(sticky=tkinter.W, column=0)
+        color_opts.grid(
+            sticky=tkinter.W,
+            row=gui.grid_row_of(label),
+            column=1,
+            columnspan=3,
+        )
+        label = tkinter.Label(parent_frame, text="New:")
+        color_opts = tkinter.OptionMenu(
+            parent_frame,
+            self.tkvars.indicator.drag_color,
+            *POSSIBLE_INDICATOR_COLORS,
+        )
+        label.grid(sticky=tkinter.W, column=0)
+        color_opts.grid(
+            sticky=tkinter.W,
+            row=gui.grid_row_of(label),
+            column=1,
+            columnspan=3,
+        )
+
     def component_select_area(
         self,
         frame_position=None,
@@ -835,35 +867,6 @@ class Panels(InterfacePlugin):
             settings_frame,
             fixed_tilesize=fixed_tilesize,
             allowed_shapes=allowed_shapes,
-        )
-        self.ui_instance.heading_with_help_button(
-            settings_frame, "Indicator colours"
-        )
-        label = tkinter.Label(settings_frame, text="Current:")
-        color_opts = tkinter.OptionMenu(
-            settings_frame,
-            self.tkvars.indicator.color,
-            *POSSIBLE_INDICATOR_COLORS,
-        )
-        label.grid(sticky=tkinter.W, column=0)
-        color_opts.grid(
-            sticky=tkinter.W,
-            row=gui.grid_row_of(label),
-            column=1,
-            columnspan=3,
-        )
-        label = tkinter.Label(settings_frame, text="New:")
-        color_opts = tkinter.OptionMenu(
-            settings_frame,
-            self.tkvars.indicator.drag_color,
-            *POSSIBLE_INDICATOR_COLORS,
-        )
-        label.grid(sticky=tkinter.W, column=0)
-        color_opts.grid(
-            sticky=tkinter.W,
-            row=gui.grid_row_of(label),
-            column=1,
-            columnspan=3,
         )
         self.ui_instance.heading_with_help_button(
             settings_frame, "Drag on the canvas to"
