@@ -437,8 +437,6 @@ class Callbacks(InterfacePlugin):
         )
         # Trigger the selection change explicitly
         self.update_selection()
-        # Snap back the drag action to safe selection moving
-        self.tkvars.drag_action.set(MOVE_SELECTION)
         return True
 
     def new_crop_drag_move(self, event):
