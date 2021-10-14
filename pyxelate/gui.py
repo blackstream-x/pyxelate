@@ -152,7 +152,13 @@ class TransientWindow(tkinter.Toplevel):
         self.parent = parent
         self.initial_focus = self
         self.body = tkinter.Frame(self)
-        self.create_content(content)
+        try:
+            self.create_content(content)
+        except NotImplementedError:
+            # Allow initially contentless windows
+            # when using this class directly
+            pass
+        #
         self.body.grid(padx=5, pady=5, sticky=tkinter.E + tkinter.W)
         self.grab_set()
         self.protocol("WM_DELETE_WINDOW", self.action_cancel)
@@ -160,8 +166,7 @@ class TransientWindow(tkinter.Toplevel):
 
     def create_content(self, content):
         """Add content to body -> overwrite in child classes"""
-        # pylint: disable=no-self-use ; abstract method
-        del content
+        raise NotImplementedError
 
     def action_cancel(self, event=None):
         """Put focus back to the parent window"""

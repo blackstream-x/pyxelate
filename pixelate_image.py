@@ -69,8 +69,8 @@ except OSError as error:
     VERSION = "(Version file is missing: %s)" % error
 #
 
-# Phases
-OPEN_FILE = "open_file"
+# Phases and panel names
+OPEN_FILE = core.UserInterface.phase_open_file
 SELECT_AREA = "select_area"
 
 PHASES = (OPEN_FILE, SELECT_AREA)
@@ -230,40 +230,31 @@ class ImageUI(core.UserInterface):
         """Subclass-specific post-initialization
         (additional variables)
         """
-        super().additional_variables()
         open_support, save_support = pixelations.get_supported_extensions()
         logging.debug("File formats open support: %r", open_support)
         logging.debug("File formats save support: %r", save_support)
         self.vars.update(
-            core.Namespace(
-                open_support=sorted(open_support),
-                save_support=sorted(save_support),
-            )
+            open_support=sorted(open_support),
+            save_support=sorted(save_support),
         )
         self.tkvars.update(
-            core.Namespace(
-                buttonstate=core.Namespace(
-                    apply=self.callbacks.get_traced_stringvar(
-                        "update_buttons", value=tkinter.NORMAL
-                    ),
-                    save=self.callbacks.get_traced_stringvar(
-                        "update_buttons", value=tkinter.NORMAL
-                    ),
-                )
+            buttonstate=core.Namespace(
+                apply=self.callbacks.get_traced_stringvar(
+                    "update_buttons", value=tkinter.NORMAL
+                ),
+                save=self.callbacks.get_traced_stringvar(
+                    "update_buttons", value=tkinter.NORMAL
+                ),
             )
         )
-        #
 
     def additional_widgets(self):
         """Subclass-specific post-initialization
         (additional widgets)
         """
         self.widgets.update(
-            core.Namespace(
-                buttons=core.Namespace(undo=None, apply=None, save=None)
-            )
+            buttons=core.Namespace(undo=None, apply=None, save=None)
         )
-        #
 
     def apply_pixelation(self):
         """Apply changes to the image"""

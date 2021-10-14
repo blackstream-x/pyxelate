@@ -75,13 +75,12 @@ except OSError as error:
 #
 
 # Phases
-OPEN_FILE = "open_file"
+OPEN_FILE = core.UserInterface.phase_open_file
 START_FRAME = "start_frame"
 START_AREA = "start_area"
 END_FRAME = "end_frame"
 END_AREA = "end_area"
 PREVIEW = "preview"
-# SELECT_AREA = 'select_area'
 
 PHASES = (
     OPEN_FILE,
@@ -706,54 +705,48 @@ class VideoUI(core.UserInterface):
         """Subclass-specific post-initialization
         (additional variables)
         """
-        super().additional_variables()
         self.vars.update(
-            core.Namespace(
-                original_frames=None,
-                modified_frames=None,
-                nb_frames=None,
-                has_audio=False,
-                vframe=None,
-                # List of pixelation start frames
-                # (original sequence, and sorted unique)
-                opxsf=[],
-                spxsf=[],
-                previous_drag_action=core.MOVE_SELECTION,
-                frame_rate=None,
-                frames_cache=None,
-                duration_usec=None,
-                unsaved_changes=False,
-                frame_limits=core.Namespace(minimum=1, maximum=1),
-                start_at=core.Namespace(**EMPTY_SELECTION),
-                end_at=core.Namespace(**EMPTY_SELECTION),
-            )
+            original_frames=None,
+            modified_frames=None,
+            nb_frames=None,
+            has_audio=False,
+            vframe=None,
+            # List of pixelation start frames
+            # (original sequence, and sorted unique)
+            opxsf=[],
+            spxsf=[],
+            previous_drag_action=core.MOVE_SELECTION,
+            frame_rate=None,
+            frames_cache=None,
+            duration_usec=None,
+            unsaved_changes=False,
+            frame_limits=core.Namespace(minimum=1, maximum=1),
+            start_at=core.Namespace(**EMPTY_SELECTION),
+            end_at=core.Namespace(**EMPTY_SELECTION),
         )
         self.tkvars.update(
-            core.Namespace(
-                current_frame=self.callbacks.get_traced_intvar("change_frame"),
-                current_frame_text=self.callbacks.get_traced_stringvar(
-                    "change_frame_from_text"
+            current_frame=self.callbacks.get_traced_intvar("change_frame"),
+            current_frame_text=self.callbacks.get_traced_stringvar(
+                "change_frame_from_text"
+            ),
+            end_frame=tkinter.IntVar(),
+            export=core.Namespace(
+                crf=tkinter.IntVar(),
+                include_audio=tkinter.IntVar(),
+                preset=tkinter.StringVar(),
+            ),
+            buttonstate=core.Namespace(
+                previous=self.callbacks.get_traced_stringvar(
+                    "update_buttons", value=tkinter.DISABLED
                 ),
-                end_frame=tkinter.IntVar(),
-                export=core.Namespace(
-                    crf=tkinter.IntVar(),
-                    include_audio=tkinter.IntVar(),
-                    preset=tkinter.StringVar(),
+                next_=self.callbacks.get_traced_stringvar(
+                    "update_buttons", value=tkinter.NORMAL
                 ),
-                buttonstate=core.Namespace(
-                    previous=self.callbacks.get_traced_stringvar(
-                        "update_buttons", value=tkinter.DISABLED
-                    ),
-                    next_=self.callbacks.get_traced_stringvar(
-                        "update_buttons", value=tkinter.NORMAL
-                    ),
-                    save=self.callbacks.get_traced_stringvar(
-                        "update_buttons", value=tkinter.DISABLED
-                    ),
+                save=self.callbacks.get_traced_stringvar(
+                    "update_buttons", value=tkinter.DISABLED
                 ),
-            )
+            ),
         )
-        #
         self.tkvars.export.crf.set(DEFAULT_EXPORT_CRF)
         self.tkvars.export.preset.set(DEFAULT_EXPORT_PRESET)
 
@@ -762,14 +755,11 @@ class VideoUI(core.UserInterface):
         (additional widgets)
         """
         self.widgets.update(
-            core.Namespace(
-                buttons=core.Namespace(previous=None, next_=None, more=None),
-                frame_canvas=None,
-                frames_slider=None,
-                frame_number=None,
-            )
+            buttons=core.Namespace(previous=None, next_=None, more=None),
+            frame_canvas=None,
+            frames_slider=None,
+            frame_number=None,
         )
-        #
 
     def check_file_type(self, file_path):
         """Return True if the file is a supported file,

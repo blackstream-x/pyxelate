@@ -161,9 +161,9 @@ class Namespace(dict):
         """Delete an attribute"""
         del self[name]
 
-    def update(self, other):
-        """Delete an attribute"""
-        for key, value in other.items():
+    def update(self, **kwargs):
+        """Add attributes from kwargs"""
+        for key, value in kwargs.items():
             self[key] = value
         #
 
@@ -483,7 +483,7 @@ class Callbacks(InterfacePlugin):
         #
         self.widgets.canvas.delete(TAG_RUBBERBAND)
         # previous_crop_area = self.vars.crop_area
-        self.vars.crop_area.update(crop_box)
+        self.vars.crop_area.update(**crop_box)
         # Switch the "crop" checkbox to "on",
         # triggering  the toggle_crop_display method implicitly
         # TODO: error handling
@@ -607,7 +607,7 @@ class Callbacks(InterfacePlugin):
             logging.error("Could not reset the crop area: %s", error)
         else:
             self.vars.crop_area.update(
-                dict(left=0, top=0, right=width, bottom=height)
+                left=0, top=0, right=width, bottom=height
             )
         #
         self.tkvars.crop.set(0)
@@ -941,12 +941,8 @@ class UserInterface:
     """GUI using tkinter (base class for pyxelate)"""
 
     phase_open_file = "open_file"
-    phase_select_area = "select_area"
-    phases = (phase_open_file, phase_select_area)
-    panel_names = {
-        phase_open_file: "Open file",
-        phase_select_area: "Select area …",
-    }
+    phases = (phase_open_file,)
+    panel_names = {}
 
     action_class = InterfacePlugin
     callback_class = Callbacks
@@ -959,9 +955,6 @@ class UserInterface:
     copyright_notice = COPYRIGHT_NOTICE
 
     file_type = "image file"
-
-    # FIXME: get rid of this
-    # pylint: disable=attribute-defined-outside-init
 
     def __init__(
         self,
@@ -992,12 +985,7 @@ class UserInterface:
             ),
             crop_area=Namespace(left=0, top=0, right=0, bottom=0),
         )
-        self.tkvars = Namespace(
-            file_name=tkinter.StringVar(),
-            drag_action=tkinter.StringVar(),
-            show_preview=tkinter.IntVar(),
-        )
-        self.tkvars.drag_action.set(MOVE_SELECTION)
+        self.tkvars = Namespace()
         self.widgets = Namespace(
             action_area=None,
             # buttons_area=None,
@@ -1008,6 +996,37 @@ class UserInterface:
         self.callbacks = self.callback_class(self)
         self.panels = self.panel_class(self)
         self.rollbacks = self.rollback_class(self)
+        # Fill self.tkvars after the callbaks plugin has been initialized
+        self.tkvars.update(
+            file_name=tkinter.StringVar(),
+            show_preview=tkinter.IntVar(),
+            # Update the selection
+            # after change of any of the following parameters
+            selection=Namespace(
+                center_x=self.callbacks.get_traced_intvar("update_selection"),
+                center_y=self.callbacks.get_traced_intvar("update_selection"),
+                width=self.callbacks.get_traced_intvar("update_selection"),
+                height=self.callbacks.get_traced_intvar("update_selection"),
+                shape=self.callbacks.get_traced_stringvar("update_selection"),
+                tilesize=self.callbacks.get_traced_intvar("update_selection"),
+            ),
+            # Redraw the indicator
+            # each time the outline color is changed
+            indicator=Namespace(
+                color=self.callbacks.get_traced_stringvar(
+                    "redraw_indicator", value="red"
+                ),
+                drag_color=tkinter.StringVar(),
+            ),
+            crop=self.callbacks.get_traced_intvar(
+                "toggle_crop_display", value=0
+            ),
+            drag_action=self.callbacks.get_traced_stringvar(
+                "set_canvas_cursor", value=MOVE_SELECTION
+            ),
+        )
+        self.tkvars.indicator.drag_color.set("blue")
+        self.tkvars.drag_action.set(MOVE_SELECTION)
         self.additional_variables()
         self.additional_widgets()
         #
@@ -1025,46 +1044,7 @@ class UserInterface:
         """Subclass-specific post-initialization
         (additional variables)
         """
-        self.tkvars.update(
-            dict(
-                # Update the selection
-                # after change of any of the following parameters
-                selection=Namespace(
-                    center_x=self.callbacks.get_traced_intvar(
-                        "update_selection"
-                    ),
-                    center_y=self.callbacks.get_traced_intvar(
-                        "update_selection"
-                    ),
-                    width=self.callbacks.get_traced_intvar("update_selection"),
-                    height=self.callbacks.get_traced_intvar(
-                        "update_selection"
-                    ),
-                    shape=self.callbacks.get_traced_stringvar(
-                        "update_selection"
-                    ),
-                    tilesize=self.callbacks.get_traced_intvar(
-                        "update_selection"
-                    ),
-                ),
-                # Redraw the indicator
-                # each time the outline color is changed
-                indicator=Namespace(
-                    color=self.callbacks.get_traced_stringvar(
-                        "redraw_indicator", value="red"
-                    ),
-                    drag_color=tkinter.StringVar(),
-                ),
-                crop=self.callbacks.get_traced_intvar(
-                    "toggle_crop_display", value=0
-                ),
-                drag_action=self.callbacks.get_traced_stringvar(
-                    "set_canvas_cursor", value=MOVE_SELECTION
-                ),
-            )
-        )
-        #
-        self.tkvars.indicator.drag_color.set("blue")
+        raise NotImplementedError
 
     def additional_widgets(self):
         """Subclass-specific post-initialization
@@ -1076,7 +1056,7 @@ class UserInterface:
         self, keep_existing=False, preset_path=None, quit_on_empty_choice=False
     ):
         """Open a file via file dialog"""
-        self.vars.current_panel = self.phase_open_file
+        self.vars.update(current_panel=self.phase_open_file)
         file_path = self.vars.original_path
         if preset_path:
             if not preset_path.is_dir():
@@ -1102,7 +1082,7 @@ class UserInterface:
                 #
                 file_path = pathlib.Path(selected_file)
             #
-            # check for an supported file type,
+            # check for a supported file type,
             # and show an error dialog and retry
             # if the selected file is not an image
             if not self.check_file_type(file_path):
@@ -1223,9 +1203,7 @@ class UserInterface:
             tags=TAG_INDICATOR,
         )
         if stipple:
-            appearance.update(
-                dict(width=1, fill=current_color, stipple=stipple)
-            )
+            appearance.update(width=1, fill=current_color, stipple=stipple)
         #
         create_widget(left, top, right, bottom, **appearance)
 
@@ -1262,11 +1240,11 @@ class UserInterface:
         #
         canvas.delete(TAG_IMAGE)
         if self.tkvars.show_preview.get():
-            self.vars.tk_image = self.vars.image.get_tk_image(
-                self.vars.image.result
+            self.vars.update(
+                tk_image=self.vars.image.get_tk_image(self.vars.image.result)
             )
         else:
-            self.vars.tk_image = self.vars.image.tk_original
+            self.vars.update(tk_image=self.vars.image.tk_original)
         #
         canvas.create_image(
             0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags=TAG_IMAGE
@@ -1300,7 +1278,7 @@ class UserInterface:
                 ) from error
             #
         #
-        self.vars.current_phase = next_phase
+        self.vars.update(current_phase=next_phase)
 
     def next_panel(self):
         """Execute the next action and go to the next panel"""
@@ -1323,7 +1301,7 @@ class UserInterface:
         except AttributeError:
             logging.warning("%s is undefined", method_display)
         else:
-            self.vars.current_phase = self.phases[phase_index - 1]
+            self.vars.update(current_phase=self.phases[phase_index - 1])
             try:
                 rollback_method()
             except NotImplementedError:
@@ -1404,7 +1382,7 @@ class UserInterface:
         except AttributeError:
             pass
         #
-        self.widgets.action_area = tkinter.Frame(self.main_window)
+        self.widgets.update(action_area=tkinter.Frame(self.main_window))
         try:
             panel_method = getattr(self.panels, self.vars.current_phase)
         except AttributeError:
@@ -1413,10 +1391,10 @@ class UserInterface:
                 " going back to phase %r."
                 % (self.vars.current_phase, self.vars.current_panel)
             )
-            self.vars.current_phase = self.vars.current_panel
+            self.vars.update(current_phase=self.vars.current_panel)
             panel_method = getattr(self.panels, self.vars.current_phase)
         else:
-            self.vars.current_panel = self.vars.current_phase
+            self.vars.update(current_panel=self.vars.current_phase)
         #
         self.__show_errors()
         logging.debug("Showing panel %r", self.vars.current_panel)
@@ -1475,11 +1453,11 @@ class UserInterface:
 
     def update_selection(self, **kwargs):
         """Update the selection for the provided key=value pairs"""
-        self.vars.trace = False
+        self.vars.update(trace=False)
         for (key, value) in kwargs.items():
             self.tkvars.selection[key].set(value)
         #
-        self.vars.trace = True
+        self.vars.update(trace=True)
 
 
 # vim: fileencoding=utf-8 ts=4 sts=4 sw=4 autoindent expandtab syntax=python:

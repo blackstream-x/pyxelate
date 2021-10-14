@@ -218,29 +218,20 @@ def pixelated(original_image, box=None, tilesize=DEFAULT_TILESIZE):
 #
 
 
-class Borg:
+class ShapesCache:
 
-    """Shared state base class as documented in
-    <https://www.oreilly.com/
+    """Borg cache for Mask shapes
+    (see <https://www.oreilly.com/
      library/view/python-cookbook/0596001673/ch05s23.html>
+     for the Borg pattern)
     """
 
+    limit = 50
     _shared_state = {}
 
     def __init__(self):
-        """Initalize shared state"""
-        self.__dict__ = self._shared_state
-
-
-class ShapesCache(Borg):
-
-    """Borg cache for Mask shapes"""
-
-    limit = 50
-
-    def __init__(self):
         """Allocate the cache"""
-        super().__init__()
+        self.__dict__ = self._shared_state
         self.__last_access = {}
         self.__shapes = {}
 
@@ -653,21 +644,22 @@ class MultiFramePixelation:
         file_name_pattern=FRAME_PATTERN,
         quality=95,
     ):
-        """Check if both directories exist"""
+        """Test the given pattern
+        (might raise a ValueError on invalid patterns)
+        and cCheck if both directories exist
+        """
+        pattern_test = file_name_pattern % 1
+        del pattern_test
         for current_path in (source_path, target_path):
             if not current_path.is_dir():
                 raise ValueError("%s is not a directory!")
             #
         #
-        # pylint: disable=pointless-statement ; Test for valid pattern
-        file_name_pattern % 1
-        # pylint: enable
         self.source_path = source_path
         self.target_path = target_path
         self.file_name_pattern = file_name_pattern
         self.quality = quality
         self.start = dict()
-        # self.end = dict()
         self.gradients = dict()
 
     def get_intermediate_value(self, item, offset):
