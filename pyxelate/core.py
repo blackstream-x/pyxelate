@@ -86,9 +86,10 @@ POSSIBLE_INDICATOR_COLORS = (
     "magenta",
 )
 
-# Items drawn on the canvas
-INDICATOR = "indicator"
-RUBBERBAND = "rubberband"
+# Items on the canvas
+TAG_IMAGE = "image"
+TAG_INDICATOR = "indicator"
+TAG_RUBBERBAND = "rubberband"
 
 # Mouse drag actions (“Drag with the mouse on the canvas to …”)
 MOVE_SELECTION = "move the selection"
@@ -118,8 +119,6 @@ GRID_FULLWIDTH = dict(padx=4, pady=2, sticky=tkinter.E + tkinter.W)
 
 
 class Namespace(dict):
-
-    # pylint: disable=too-many-instance-attributes
 
     """A dict subclass that exposes its items as attributes.
 
@@ -247,7 +246,9 @@ class Callbacks(InterfacePlugin):
     def __clicked_inside_indicator(self, event):
         """Return True if the click was inside the indicator"""
         try:
-            (left, top, right, bottom) = self.widgets.canvas.bbox(INDICATOR)
+            (left, top, right, bottom) = self.widgets.canvas.bbox(
+                TAG_INDICATOR
+            )
         except TypeError as error:
             logging.debug(error)
             return False
@@ -277,29 +278,30 @@ class Callbacks(InterfacePlugin):
 
     def __get_translated_bbox(self, tag_name):
         """Get the bbox coordinates
-        calculated from display to image size.
-        Return a tuple of (left, top, right, bottom).
+        translated from display to image size.
+        and return them in a Namespace instance.
         """
         (left, top, right, bottom) = self.widgets.canvas.bbox(tag_name)
-        return (
-            self.vars.image.from_display_size(left),
-            self.vars.image.from_display_size(top),
-            self.vars.image.from_display_size(right),
-            self.vars.image.from_display_size(bottom),
+        return Namespace(
+            left=self.vars.image.from_display_size(left),
+            top=self.vars.image.from_display_size(top),
+            right=self.vars.image.from_display_size(right),
+            bottom=self.vars.image.from_display_size(bottom),
         )
 
-    def __get_selection_coordinates(self, tag_name):
-        """Get the bbox selection as a Namespace with the
-        selection coordinates (center and dimensions),
-        calculated from display to image size.
-        Return a tuple of (width, height, center_x, center_y)
+    def __get_translated_coordinates(self, tag_name):
+        """Calculate dimensions and center
+        from translated bbox coordinates
+        and return them in a Namespace instance.
+        as a Namespace containing dimensions and center.
         """
-        (left, top, right, bottom) = self.__get_translated_bbox(tag_name)
-        width = right - left
-        height = bottom - top
-        center_x = (left + right) // 2
-        center_y = (top + bottom) // 2
-        return (width, height, center_x, center_y)
+        translated = self.__get_translated_bbox(tag_name)
+        return Namespace(
+            width=translated.right - translated.left,
+            height=translated.bottom - translated.top,
+            center_x=(translated.left + translated.right) // 2,
+            center_y=(translated.top + translated.bottom) // 2,
+        )
 
     def get_traced_intvar(self, method_name, value=None):
         """Return a traced IntVar() calling
@@ -365,7 +367,7 @@ class Callbacks(InterfacePlugin):
 
     def move_sel_drag_move(self, event):
         """Handle dragging of the indicator"""
-        if self.vars.drag_data.item != INDICATOR:
+        if self.vars.drag_data.item != TAG_INDICATOR:
             return False
         #
         # compute how much the mouse has moved
@@ -379,8 +381,10 @@ class Callbacks(InterfacePlugin):
         self.vars.drag_data.x = current_x
         self.vars.drag_data.y = current_y
         # Update the selection (position only)
-        (center_x, center_y) = self.__get_selection_coordinates(INDICATOR)[-2:]
-        self.ui_instance.update_selection(center_x=center_x, center_y=center_y)
+        new_position = self.__get_translated_coordinates(TAG_INDICATOR)
+        self.ui_instance.update_selection(
+            center_x=new_position.center_x, center_y=new_position.center_y
+        )
         self.ui_instance.pixelate_selection()
         return True
 
@@ -390,14 +394,14 @@ class Callbacks(InterfacePlugin):
             return False
         #
         # record the item and its location
-        self.vars.drag_data.item = INDICATOR
+        self.vars.drag_data.item = TAG_INDICATOR
         self.vars.drag_data.x = event.x
         self.vars.drag_data.y = event.y
         return True
 
     def move_sel_drag_stop(self, *unused_event):
         """End drag of an object"""
-        if self.vars.drag_data.item != INDICATOR:
+        if self.vars.drag_data.item != TAG_INDICATOR:
             return False
         #
         # reset the drag information
@@ -417,7 +421,7 @@ class Callbacks(InterfacePlugin):
     def new_sel_drag_start(self, event):
         """Begin dragging for a new selection"""
         # record the item and its location
-        self.vars.drag_data.item = RUBBERBAND
+        self.vars.drag_data.item = TAG_RUBBERBAND
         self.vars.drag_data.x = event.x
         self.vars.drag_data.y = event.y
         return True
@@ -425,28 +429,23 @@ class Callbacks(InterfacePlugin):
     def new_sel_drag_stop(self, *unused_event):
         """End drag for a new selection"""
         try:
-            (
-                width,
-                height,
-                center_x,
-                center_y,
-            ) = self.__get_selection_coordinates(RUBBERBAND)
+            new_selection = self.__get_translated_coordinates(TAG_RUBBERBAND)
         except TypeError:
             # No selection dragged (i.e. click without dragging)
             return False
         #
-        self.widgets.canvas.delete(RUBBERBAND)
-        # Adjust to minimum sizes
-        if width < MINIMUM_SELECTION_SIZE:
-            width = MINIMUM_SELECTION_SIZE
+        self.widgets.canvas.delete(TAG_RUBBERBAND)
+        # The selection has already been updated while dragging,
+        # we only need to adjust it to the minimum sizes if necessary.
+        adjusted_dimensions = {}
+        for dimension in ("width", "height"):
+            if new_selection[dimension] < MINIMUM_SELECTION_SIZE:
+                adjusted_dimensions[dimension] = MINIMUM_SELECTION_SIZE
+            #
         #
-        if height < MINIMUM_SELECTION_SIZE:
-            height = MINIMUM_SELECTION_SIZE
+        if adjusted_dimensions:
+            self.ui_instance.update_selection(**adjusted_dimensions)
         #
-        # Set the selection attributes
-        self.ui_instance.update_selection(
-            center_x=center_x, center_y=center_y, width=width, height=height
-        )
         # Trigger the selection change explicitly
         self.update_selection()
         return True
@@ -455,7 +454,7 @@ class Callbacks(InterfacePlugin):
         """Drag a new crop area"""
         [left, right] = sorted((event.x, self.vars.drag_data.x))
         [top, bottom] = sorted((event.y, self.vars.drag_data.y))
-        self.widgets.canvas.delete(RUBBERBAND)
+        self.widgets.canvas.delete(TAG_RUBBERBAND)
         current_color = self.tkvars.indicator.drag_color.get()
         self.widgets.canvas.create_rectangle(
             left,
@@ -463,13 +462,13 @@ class Callbacks(InterfacePlugin):
             right,
             bottom,
             outline=current_color,
-            tags=RUBBERBAND,
+            tags=TAG_RUBBERBAND,
         )
         return True
 
     def new_crop_drag_start(self, event):
         """Begin dragging for a new crop area"""
-        self.vars.drag_data.item = RUBBERBAND
+        self.vars.drag_data.item = TAG_RUBBERBAND
         self.vars.drag_data.x = event.x
         self.vars.drag_data.y = event.y
         return True
@@ -477,16 +476,14 @@ class Callbacks(InterfacePlugin):
     def new_crop_drag_stop(self, *unused_event):
         """End drag for a new crop area"""
         try:
-            (left, top, right, bottom) = self.__get_translated_bbox(RUBBERBAND)
+            crop_box = self.__get_translated_bbox(TAG_RUBBERBAND)
         except TypeError:
             # No selection dragged (i.e. click without dragging)
             return False
         #
-        self.widgets.canvas.delete(RUBBERBAND)
+        self.widgets.canvas.delete(TAG_RUBBERBAND)
         # previous_crop_area = self.vars.crop_area
-        self.vars.crop_area.update(
-            dict(left=left, top=top, right=right, bottom=bottom)
-        )
+        self.vars.crop_area.update(crop_box)
         # Switch the "crop" checkbox to "on",
         # triggering  the toggle_crop_display method implicitly
         # TODO: error handling
@@ -509,13 +506,13 @@ class Callbacks(InterfacePlugin):
     def resize_sel_drag_start(self, event):
         """Begin dragging for selection resize"""
         # record the item and its location
-        self.vars.drag_data.item = RUBBERBAND
+        self.vars.drag_data.item = TAG_RUBBERBAND
         self.vars.drag_data.x = event.x
         self.vars.drag_data.y = event.y
-        (left, top, right, bottom) = self.widgets.canvas.bbox(INDICATOR)
+        (left, top, right, bottom) = self.widgets.canvas.bbox(TAG_INDICATOR)
         center_x = (left + right) // 2
         center_y = (top + bottom) // 2
-        # Ancor at the opposite side, seen from the selection center
+        # Anchor at the opposite side, seen from the selection center
         if event.x > center_x:
             self.vars.drag_data.anchor_x = left
             self.vars.drag_data.var_x = right
@@ -560,7 +557,7 @@ class Callbacks(InterfacePlugin):
             #
         #
         # Draw a new selection outline
-        self.widgets.canvas.delete(RUBBERBAND)
+        self.widgets.canvas.delete(TAG_RUBBERBAND)
         outer_dash = (1, 1)
         shape = self.tkvars.selection.shape.get()
         current_color = self.tkvars.indicator.drag_color.get()
@@ -574,7 +571,7 @@ class Callbacks(InterfacePlugin):
             bottom,
             dash=outer_dash,
             outline=current_color,
-            tags=RUBBERBAND,
+            tags=TAG_RUBBERBAND,
         )
         if shape in ELLIPTIC_SHAPES:
             self.widgets.canvas.create_oval(
@@ -584,14 +581,11 @@ class Callbacks(InterfacePlugin):
                 bottom,
                 dash=(1, 1),
                 outline=current_color,
-                tags=RUBBERBAND,
+                tags=TAG_RUBBERBAND,
             )
         # Update the selection
-        (width, height, center_x, center_y) = self.__get_selection_coordinates(
-            RUBBERBAND
-        )
         self.ui_instance.update_selection(
-            center_x=center_x, center_y=center_y, width=width, height=height
+            **self.__get_translated_coordinates(TAG_RUBBERBAND)
         )
         return True
 
@@ -664,7 +658,6 @@ class Panels(InterfacePlugin):
 
     """Panel and panel component methods"""
 
-    # pylint: disable=too-many-locals
     def component_shape_settings(
         self, settings_frame, fixed_tilesize=False, allowed_shapes=ALL_SHAPES
     ):
@@ -843,7 +836,7 @@ class Panels(InterfacePlugin):
         )
         self.vars.tk_image = self.vars.image.tk_original
         self.widgets.canvas.create_image(
-            0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags="image"
+            0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags=TAG_IMAGE
         )
         self.widgets.canvas.grid()
         self.ui_instance.callbacks.set_canvas_cursor()
@@ -894,6 +887,7 @@ class Panels(InterfacePlugin):
 
     def component_zoom_factor(self, parent_frame, display_ratio):
         """Show the zoom factor according to display ratio"""
+        # FIXME: use display ratio from self.vars.image
         if display_ratio == int(display_ratio):
             factor = int(display_ratio)
         else:
@@ -966,6 +960,7 @@ class UserInterface:
 
     file_type = "image file"
 
+    # FIXME: get rid of this
     # pylint: disable=attribute-defined-outside-init
 
     def __init__(
@@ -1215,7 +1210,7 @@ class UserInterface:
         top = center_y - height // 2
         bottom = top + height
         shape = self.tkvars.selection.shape.get()
-        canvas.delete(INDICATOR)
+        canvas.delete(TAG_INDICATOR)
         if shape in ELLIPTIC_SHAPES:
             create_widget = canvas.create_oval
         elif shape in RECTANGULAR_SHAPES:
@@ -1225,7 +1220,7 @@ class UserInterface:
         appearance = dict(
             width=INDICATOR_OUTLINE_WIDTH,
             outline=current_color,
-            tags=INDICATOR,
+            tags=TAG_INDICATOR,
         )
         if stipple:
             appearance.update(
@@ -1265,7 +1260,7 @@ class UserInterface:
         if not canvas:
             return
         #
-        canvas.delete("image")
+        canvas.delete(TAG_IMAGE)
         if self.tkvars.show_preview.get():
             self.vars.tk_image = self.vars.image.get_tk_image(
                 self.vars.image.result
@@ -1274,9 +1269,9 @@ class UserInterface:
             self.vars.tk_image = self.vars.image.tk_original
         #
         canvas.create_image(
-            0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags="image"
+            0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags=TAG_IMAGE
         )
-        canvas.tag_lower("image", INDICATOR)
+        canvas.tag_lower(TAG_IMAGE, TAG_INDICATOR)
 
     def __next_action(self):
         """Execute the next action"""
