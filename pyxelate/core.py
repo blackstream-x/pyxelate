@@ -66,6 +66,7 @@ RECTANGULAR_SHAPES = (RECT, SQUARE)
 QUADRATIC_SHAPES = (CIRCLE, SQUARE)
 ALL_SHAPES = ELLIPTIC_SHAPES + RECTANGULAR_SHAPES
 
+DEFAULT_TILESIZE = 25
 MINIMUM_TILESIZE = 10
 MAXIMUM_TILESIZE = 200
 TILESIZE_INCREMENT = 5
@@ -223,13 +224,13 @@ class InterfacePlugin:
     to access its varuables and widgets
     """
 
-    def __init__(self, ui_instance):
-        """Store the ui_instance"""
-        self.ui_instance = ui_instance
-        self.tkvars = ui_instance.tkvars
-        self.vars = ui_instance.vars
-        self.widgets = ui_instance.widgets
-        self.main_window = ui_instance.main_window
+    def __init__(self, application):
+        """Store the application"""
+        self.application = application
+        self.tkvars = application.tkvars
+        self.vars = application.vars
+        self.widgets = application.widgets
+        self.main_window = application.main_window
 
 
 class Callbacks(InterfacePlugin):
@@ -382,10 +383,10 @@ class Callbacks(InterfacePlugin):
         self.vars.drag_data.y = current_y
         # Update the selection (position only)
         new_position = self.__get_translated_coordinates(TAG_INDICATOR)
-        self.ui_instance.update_selection(
+        self.application.update_selection(
             center_x=new_position.center_x, center_y=new_position.center_y
         )
-        self.ui_instance.pixelate_selection()
+        self.application.pixelate_selection()
         return True
 
     def move_sel_drag_start(self, event):
@@ -444,7 +445,7 @@ class Callbacks(InterfacePlugin):
             #
         #
         if adjusted_dimensions:
-            self.ui_instance.update_selection(**adjusted_dimensions)
+            self.application.update_selection(**adjusted_dimensions)
         #
         # Trigger the selection change explicitly
         self.update_selection()
@@ -584,7 +585,7 @@ class Callbacks(InterfacePlugin):
                 tags=TAG_RUBBERBAND,
             )
         # Update the selection
-        self.ui_instance.update_selection(
+        self.application.update_selection(
             **self.__get_translated_coordinates(TAG_RUBBERBAND)
         )
         return True
@@ -592,7 +593,7 @@ class Callbacks(InterfacePlugin):
     def redraw_indicator(self, *unused_arguments):
         """Trigger redrawing of the indicator"""
         try:
-            self.ui_instance.draw_indicator()
+            self.application.draw_indicator()
         except AttributeError as error:
             logging.warning("%s", error)
         #
@@ -636,7 +637,7 @@ class Callbacks(InterfacePlugin):
     def toggle_preview(self, *unused_arguments):
         """Trigger preview update"""
         try:
-            self.ui_instance.show_image()
+            self.application.show_image()
         except AttributeError as error:
             logging.warning("%s", error)
         #
@@ -648,10 +649,10 @@ class Callbacks(InterfacePlugin):
     def update_selection(self, *unused_arguments):
         """Trigger update after selection changed"""
         if self.vars.trace:
-            self.ui_instance.pixelate_selection()
-            self.ui_instance.draw_indicator()
+            self.application.pixelate_selection()
+            self.application.draw_indicator()
         #
-        self.ui_instance.toggle_height()
+        self.application.toggle_height()
 
 
 class Panels(InterfacePlugin):
@@ -659,23 +660,18 @@ class Panels(InterfacePlugin):
     """Panel and panel component methods"""
 
     def component_shape_settings(
-        self, settings_frame, fixed_tilesize=False, allowed_shapes=ALL_SHAPES
+        self, settings_frame, allowed_shapes=ALL_SHAPES
     ):
         """Show the shape part of the settings frame"""
-        self.ui_instance.heading_with_help_button(settings_frame, "Selection")
+        self.application.heading_with_help_button(settings_frame, "Selection")
         label = tkinter.Label(settings_frame, text="Tile size:")
-        if fixed_tilesize:
-            ts_state = tkinter.DISABLED
-        else:
-            ts_state = "readonly"
-        #
         tilesize = tkinter.Spinbox(
             settings_frame,
             from_=MINIMUM_TILESIZE,
             to=MAXIMUM_TILESIZE,
             increment=TILESIZE_INCREMENT,
             justify=tkinter.RIGHT,
-            state=ts_state,
+            state="readonly",
             width=4,
             textvariable=self.tkvars.selection.tilesize,
         )
@@ -757,7 +753,7 @@ class Panels(InterfacePlugin):
         preview_active = tkinter.Checkbutton(
             settings_frame,
             anchor=tkinter.W,
-            command=self.ui_instance.show_image,
+            command=self.application.show_image,
             text="Show preview",
             variable=self.tkvars.show_preview,
             indicatoron=1,
@@ -770,7 +766,7 @@ class Panels(InterfacePlugin):
 
     def component_file_info(self, parent_frame):
         """Show information about the current file"""
-        self.ui_instance.heading_with_help_button(
+        self.application.heading_with_help_button(
             parent_frame, "Original file"
         )
         label = tkinter.Label(parent_frame, textvariable=self.tkvars.file_name)
@@ -778,19 +774,46 @@ class Panels(InterfacePlugin):
         choose_button = tkinter.Button(
             parent_frame,
             text="Choose another file",
-            command=self.ui_instance.open_file,
+            command=self.application.open_file,
         )
         choose_button.grid(sticky=tkinter.W, columnspan=4)
 
-    def component_image_info(
-        self, parent_frame, frame_position, change_enabled=False
-    ):
+    def component_image_info(self, parent_frame):
         """Show information about the current image"""
         raise NotImplementedError
 
+    def component_image_on_canvas(self):
+        """Show the image on a canvas"""
+        image_frame = tkinter.Frame(self.widgets.action_area, **WITH_BORDER)
+        self.widgets.canvas = tkinter.Canvas(
+            image_frame,
+            width=self.vars.canvas_width,
+            height=self.vars.canvas_height,
+        )
+        self.vars.tk_image = self.vars.image.tk_original
+        self.widgets.canvas.create_image(
+            0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags=TAG_IMAGE
+        )
+        self.widgets.canvas.grid()
+        self.application.callbacks.set_canvas_cursor()
+        self.application.draw_indicator()
+        self.application.pixelate_selection()
+        self.vars.trace = True
+        # add bindings to create a new selector
+        self.widgets.canvas.bind(
+            "<ButtonPress-1>", self.application.callbacks.drag_start
+        )
+        self.widgets.canvas.bind(
+            "<ButtonRelease-1>", self.application.callbacks.drag_stop
+        )
+        self.widgets.canvas.bind(
+            "<B1-Motion>", self.application.callbacks.drag_move
+        )
+        image_frame.grid(row=1, column=0, rowspan=3, **GRID_FULLWIDTH)
+
     def component_indicator_colours(self, parent_frame):
         """Show colours selections"""
-        self.ui_instance.heading_with_help_button(parent_frame, "Colours")
+        self.application.heading_with_help_button(parent_frame, "Colours")
         label = tkinter.Label(parent_frame, text="Indicator outline:")
         color_opts = tkinter.OptionMenu(
             parent_frame,
@@ -820,44 +843,13 @@ class Panels(InterfacePlugin):
 
     def component_select_area(
         self,
-        frame_position=None,
-        change_enabled=False,
-        fixed_tilesize=False,
         allowed_shapes=ALL_SHAPES,
     ):
         """Show the image on a canvas and let
         the user select the area to be pixelated
         """
-        image_frame = tkinter.Frame(self.widgets.action_area, **WITH_BORDER)
-        self.widgets.canvas = tkinter.Canvas(
-            image_frame,
-            width=self.vars.canvas_width,
-            height=self.vars.canvas_height,
-        )
-        self.vars.tk_image = self.vars.image.tk_original
-        self.widgets.canvas.create_image(
-            0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags=TAG_IMAGE
-        )
-        self.widgets.canvas.grid()
-        self.ui_instance.callbacks.set_canvas_cursor()
-        self.ui_instance.draw_indicator()
-        self.ui_instance.pixelate_selection()
-        self.vars.trace = True
-        # add bindings to create a new selector
-        self.widgets.canvas.bind(
-            "<ButtonPress-1>", self.ui_instance.callbacks.drag_start
-        )
-        self.widgets.canvas.bind(
-            "<ButtonRelease-1>", self.ui_instance.callbacks.drag_stop
-        )
-        self.widgets.canvas.bind(
-            "<B1-Motion>", self.ui_instance.callbacks.drag_move
-        )
-        image_frame.grid(row=1, column=0, rowspan=3, **GRID_FULLWIDTH)
+        self.component_image_on_canvas()
         self.sidebar_settings(
-            frame_position,
-            change_enabled=change_enabled,
-            fixed_tilesize=fixed_tilesize,
             allowed_shapes=allowed_shapes,
         )
 
@@ -885,9 +877,9 @@ class Panels(InterfacePlugin):
             self.vars.supported_drag_actions.append(single_drag_action)
         #
 
-    def component_zoom_factor(self, parent_frame, display_ratio):
+    def component_zoom_factor(self, parent_frame):
         """Show the zoom factor according to display ratio"""
-        # FIXME: use display ratio from self.vars.image
+        display_ratio = self.vars.image.display_ratio
         if display_ratio == int(display_ratio):
             factor = int(display_ratio)
         else:
@@ -914,26 +906,20 @@ class Panels(InterfacePlugin):
 
     def sidebar_settings(
         self,
-        frame_position,
-        change_enabled=False,
-        fixed_tilesize=False,
         allowed_shapes=ALL_SHAPES,
     ):
         """Show the settings sidebar"""
         settings_frame = tkinter.Frame(self.widgets.action_area, **WITH_BORDER)
         self.component_file_info(settings_frame)
-        self.component_image_info(
-            settings_frame, frame_position, change_enabled=change_enabled
-        )
+        self.component_image_info(settings_frame)
         self.component_shape_settings(
             settings_frame,
-            fixed_tilesize=fixed_tilesize,
             allowed_shapes=allowed_shapes,
         )
         self.component_select_drag_action(settings_frame)
         settings_frame.columnconfigure(4, weight=100)
         settings_frame.grid(row=0, column=1, rowspan=2, **GRID_FULLWIDTH)
-        self.ui_instance.toggle_height()
+        self.application.toggle_height()
 
 
 class UserInterface:
@@ -1231,6 +1217,34 @@ class UserInterface:
         return True if the file was saved
         """
         raise NotImplementedError
+
+    def set_default_selection(self, tilesize=DEFAULT_TILESIZE):
+        """Set default selection parameters from the following:
+        shape: oval,
+        width: 20% of the image width,
+        height: same as width,
+        position: image center
+        """
+        (im_width, im_height) = self.vars.image.original.size
+        sel_width = self.tkvars.selection.width.get()
+        if not sel_width:
+            # Set initial selection width to 20% of image width
+            sel_width = max(INITIAL_SELECTION_SIZE, round(im_width / 5))
+        #
+        sel_height = self.tkvars.selection.height.get()
+        if not sel_height:
+            sel_height = sel_width
+        #
+        center_x = self.tkvars.selection.center_x.get() or im_width // 2
+        center_y = self.tkvars.selection.center_y.get() or im_height // 2
+        self.update_selection(
+            center_x=center_x,
+            center_y=center_y,
+            width=min(sel_width, im_width),
+            height=min(sel_height, im_height),
+            shape=self.tkvars.selection.shape.get() or OVAL,
+            tilesize=self.tkvars.selection.tilesize.get() or tilesize,
+        )
 
     def show_image(self):
         """Show image or preview according to the show_preview setting"""
