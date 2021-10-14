@@ -110,8 +110,7 @@ EMPTY_SELECTION = dict(
     height=None,
 )
 
-FRAME_PATTERN = "frame%04d.jpg"
-MAX_NB_FRAMES = 9999
+MAX_NB_FRAMES = 10000
 
 ONE_MILLION = 1000000
 
@@ -158,7 +157,6 @@ class Actions(core.InterfacePlugin):
         """
         self.vars.start_at.frame = self.tkvars.current_frame.get()
         logging.debug("Current frame# is %r", self.vars.start_at.frame)
-        # self.vars.frame_file = FRAME_PATTERN % self.vars.start_at.frame
         self.vars.image = pixelations.FramePixelation(
             pathlib.Path(self.vars.original_frames.name)
             / self.vars.frame_file,
@@ -216,7 +214,6 @@ class Actions(core.InterfacePlugin):
         self.vars.end_at.frame = self.tkvars.current_frame.get()
         logging.debug("Current frame# is %r", self.vars.end_at.frame)
         self.ui_instance.adjust_selection(self.vars.end_at)
-        # self.vars.frame_file = FRAME_PATTERN % self.vars.end_at.frame
         self.vars.image = pixelations.FramePixelation(
             pathlib.Path(self.vars.original_frames.name)
             / self.vars.frame_file,
@@ -247,7 +244,7 @@ class Actions(core.InterfacePlugin):
         pixelator = pixelations.MultiFramePixelation(
             pathlib.Path(self.vars.original_frames.name),
             pathlib.Path(self.vars.modified_frames.name),
-            file_name_pattern=FRAME_PATTERN,
+            quality="maximum",
         )
         progress = gui.TransientProgressDisplay(
             self.main_window,
@@ -260,7 +257,6 @@ class Actions(core.InterfacePlugin):
             px_shape,
             self.vars.start_at,
             self.vars.end_at,
-            quality="maximum",
         ):
             progress.set_current_value(percentage)
         #
@@ -307,7 +303,7 @@ class VideoCallbacks(core.Callbacks):
             self.tkvars.current_frame.set(current_frame)
         #
         self.vars.trace = True
-        self.vars.frame_file = FRAME_PATTERN % current_frame
+        self.vars.frame_file = pixelations.FRAME_PATTERN % current_frame
         frame_path = (
             pathlib.Path(self.vars.original_frames.name) / self.vars.frame_file
         )
@@ -635,7 +631,7 @@ class Rollbacks(core.InterfacePlugin):
         self.vars.trace = False
         current_frame = self.vars.start_at.frame
         self.ui_instance.adjust_current_frame(current_frame)
-        self.vars.frame_file = FRAME_PATTERN % current_frame
+        self.vars.frame_file = pixelations.FRAME_PATTERN % current_frame
         self.vars.image = pixelations.FramePixelation(
             pathlib.Path(self.vars.original_frames.name)
             / self.vars.frame_file,
@@ -666,7 +662,7 @@ class Rollbacks(core.InterfacePlugin):
         self.vars.trace = False
         current_frame = self.vars.end_at.frame
         self.ui_instance.adjust_current_frame(current_frame)
-        self.vars.frame_file = FRAME_PATTERN % current_frame
+        self.vars.frame_file = pixelations.FRAME_PATTERN % current_frame
         self.vars.image = pixelations.FramePixelation(
             pathlib.Path(self.vars.original_frames.name)
             / self.vars.frame_file,
@@ -879,7 +875,9 @@ class VideoUI(core.UserInterface):
             "1",
             "-qmin",
             "1",
-            os.path.join(self.vars.original_frames.name, FRAME_PATTERN),
+            os.path.join(
+                self.vars.original_frames.name, pixelations.FRAME_PATTERN
+            ),
             executable=self.options.ffmpeg_executable,
         )
         split_exec.add_extra_arguments("-loglevel", "error")
@@ -1035,7 +1033,7 @@ class VideoUI(core.UserInterface):
         original_path = pathlib.Path(self.vars.original_frames.name)
         target_path = pathlib.Path(self.vars.modified_frames.name)
         for frame_number in range(1, self.vars.nb_frames + 1):
-            frame_file = FRAME_PATTERN % frame_number
+            frame_file = pixelations.FRAME_PATTERN % frame_number
             frame_target_path = target_path / frame_file
             if not frame_target_path.exists():
                 frame_source_path = original_path / frame_file
@@ -1133,7 +1131,9 @@ class VideoUI(core.UserInterface):
             "-framerate",
             str(self.vars.frame_rate),
             "-i",
-            os.path.join(self.vars.modified_frames.name, FRAME_PATTERN),
+            os.path.join(
+                self.vars.modified_frames.name, pixelations.FRAME_PATTERN
+            ),
         ]
         if self.tkvars.export.include_audio.get():
             arguments.extend(

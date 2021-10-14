@@ -53,7 +53,7 @@ DEFAULT_CANVAS_SIZE = (720, 405)
 ELLIPSE = "ellipse"
 RECTANGLE = "rectangle"
 
-FRAME_PATTERN = "frame%04d.jpg"
+FRAME_PATTERN = "frame%06d.jpg"
 
 
 #
@@ -175,11 +175,10 @@ def pixelated(original_image, box=None, tilesize=DEFAULT_TILESIZE):
     or its box sized portion
     """
     if box:
-        left, top, right, bottom = box
-        original_width = right - left
-        original_height = bottom - top
+        # (left, top, right, bottom) = box
+        original_width = box[2] - box[0]
+        original_height = box[3] - box[1]
     else:
-        left, top, right, bottom = (0, 0, 0, 0)
         original_width = original_image.width
         original_height = original_image.height
     #
@@ -194,9 +193,9 @@ def pixelated(original_image, box=None, tilesize=DEFAULT_TILESIZE):
     oversize_width = reduced_width * tilesize
     oversize_height = reduced_height * tilesize
     if box:
-        oversized = original_image.crop(
-            (left, top, left + oversize_width, top + oversize_height)
-        )
+        right = box[0] + oversize_width
+        bottom = box[1] + oversize_height
+        oversized = original_image.crop(box=(box[0], box[1], right, bottom))
     else:
         oversized = Image.new(
             original_image.mode,
@@ -648,7 +647,11 @@ class MultiFramePixelation:
     """Pixelate a frames sequence"""
 
     def __init__(
-        self, source_path, target_path, file_name_pattern=FRAME_PATTERN
+        self,
+        source_path,
+        target_path,
+        file_name_pattern=FRAME_PATTERN,
+        quality=95,
     ):
         """Check if both directories exist"""
         for current_path in (source_path, target_path):
@@ -661,7 +664,8 @@ class MultiFramePixelation:
         # pylint: enable
         self.source_path = source_path
         self.target_path = target_path
-        self.pattern = file_name_pattern
+        self.file_name_pattern = file_name_pattern
+        self.quality = quality
         self.start = dict()
         # self.end = dict()
         self.gradients = dict()
@@ -672,7 +676,7 @@ class MultiFramePixelation:
         """
         return self.start[item] + round(self.gradients[item] * offset)
 
-    def pixelate_frames(self, tilesize, shape, start, end, quality=95):
+    def pixelate_frames(self, tilesize, shape, start, end):
         """Pixelate the frames and yield a progress fraction
         start and end must be Namespaces or dicts
         containing frame, center_x, center_y, width and height
@@ -691,7 +695,7 @@ class MultiFramePixelation:
             )
         #
         for current_frame in range(start_frame, end_frame + 1):
-            file_name = self.pattern % current_frame
+            file_name = self.file_name_pattern % current_frame
             source_frame = FramePixelation(
                 self.source_path / file_name,
                 canvas_size=None,
@@ -710,7 +714,7 @@ class MultiFramePixelation:
                 ),
             )
             source_frame.result.save(
-                self.target_path / file_name, quality=quality
+                self.target_path / file_name, quality=self.quality
             )
             # logging.debug('Saved pixelated frame# %r', current_frame)
             yield round(Fraction(100 * (offset + 1), (frames_diff + 1)))
