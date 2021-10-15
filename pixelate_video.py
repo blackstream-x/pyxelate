@@ -417,10 +417,11 @@ class Panels(core.Panels):
         self.widgets.canvas.grid()
         self.vars.trace = True
         if self.vars.current_panel in (START_AREA, END_AREA, PREVIEW):
-            self.application.callbacks.set_canvas_cursor()
-            self.application.draw_indicator()
-            self.application.pixelate_selection()
-            # add bindings (for crop area definition)
+            if self.vars.current_panel in (START_AREA, END_AREA):
+                self.application.draw_indicator()
+                self.application.pixelate_selection()
+            #
+            # add bindings
             self.widgets.canvas.bind(
                 "<ButtonPress-1>", self.application.callbacks.drag_start
             )
