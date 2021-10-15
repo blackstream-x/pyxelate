@@ -420,29 +420,34 @@ class ImageUI(core.UserInterface):
         self.vars.unapplied_changes = False
         return True
 
-    def show_additional_buttons(self, buttons_area, buttons_grid):
+    def show_additional_buttons(self, buttons_area):
         """Additional buttons for the pixelate_image script"""
-        self.widgets.buttons.undo = tkinter.Button(
-            buttons_area,
-            text="\u238c Undo",
-            command=self.revert_last_pixelation,
-        )
-        self.widgets.buttons.undo.grid(row=0, column=0, **buttons_grid)
-        self.widgets.buttons.apply = tkinter.Button(
-            buttons_area, text="\u2713 Apply", command=self.apply_pixelation
-        )
-        self.widgets.buttons.apply.grid(row=0, column=1, **buttons_grid)
         try:
-            self.widgets.buttons.save = tkinter.Button(
+            save_button = tkinter.Button(
                 buttons_area, text="\U0001f5ab Save", command=self.save_file
             )
         except tkinter.TclError:
-            self.widgets.buttons.save = tkinter.Button(
+            # Mitigate Tkinter UnicodeError
+            save_button = tkinter.Button(
                 buttons_area, text="\u2386 Save", command=self.save_file
             )
         #
-        self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
-        self.callbacks.update_buttons()
+        self.widgets.buttons.update(
+            undo=tkinter.Button(
+                buttons_area,
+                text="\u238c Undo",
+                command=self.revert_last_pixelation,
+            ),
+            apply=tkinter.Button(
+                buttons_area,
+                text="\u2713 Apply",
+                command=self.apply_pixelation,
+            ),
+            save=save_button,
+        )
+        self.widgets.buttons.undo.grid(row=0, column=0, **core.BUTTONS_GRID)
+        self.widgets.buttons.apply.grid(row=0, column=1, **core.BUTTONS_GRID)
+        self.widgets.buttons.save.grid(row=0, column=2, **core.BUTTONS_GRID)
         return 1
 
 

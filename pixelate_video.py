@@ -923,42 +923,53 @@ class VideoUI(core.UserInterface):
         self.tkvars.file_name.set(file_path.name)
         self.tkvars.current_frame.set(1)
 
-    def show_additional_buttons(self, buttons_area, buttons_grid):
+    def show_additional_buttons(self, buttons_area):
         """Additional buttons for the pixelate_image script"""
-        self.widgets.buttons.previous = tkinter.Button(
-            buttons_area, text="\u25c1 Previous", command=self.previous_panel
-        )
-        self.widgets.buttons.previous.grid(row=0, column=0, **buttons_grid)
-        self.widgets.buttons.next_ = tkinter.Button(
-            buttons_area, text="\u25b7 Next", command=self.next_panel
-        )
-        self.widgets.buttons.next_.grid(row=0, column=1, **buttons_grid)
         try:
-            self.widgets.buttons.save = tkinter.Button(
+            save_button = tkinter.Button(
                 buttons_area, text="\U0001f5ab Save", command=self.save_file
             )
         except tkinter.TclError:
-            self.widgets.buttons.save = tkinter.Button(
+            # Mitigate Tkinter UnicodeError
+            save_button = tkinter.Button(
                 buttons_area, text="\u2386 Save", command=self.save_file
             )
         #
-        self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
+        self.widgets.buttons.update(
+            previous=tkinter.Button(
+                buttons_area,
+                text="\u25c1 Previous",
+                command=self.previous_panel,
+            ),
+            next_=tkinter.Button(
+                buttons_area, text="\u25b7 Next", command=self.next_panel
+            ),
+            save=save_button,
+        )
+        self.widgets.buttons.previous.grid(
+            row=0, column=0, **core.BUTTONS_GRID
+        )
+        self.widgets.buttons.next_.grid(row=0, column=1, **core.BUTTONS_GRID)
+        self.widgets.buttons.save.grid(row=0, column=2, **core.BUTTONS_GRID)
         # Set button states and defer state manipulations
         self.vars.trace = False
         if self.vars.current_panel == PREVIEW:
             self.tkvars.buttonstate.save.set(tkinter.NORMAL)
             self.tkvars.buttonstate.next_.set(tkinter.DISABLED)
+            # right mouse click as shortcut for "Next"
+            self.main_window.unbind_all("<ButtonRelease-3>")
         else:
             self.tkvars.buttonstate.save.set(tkinter.DISABLED)
             self.tkvars.buttonstate.next_.set(tkinter.NORMAL)
+            # right mouse click as shortcut for "Next"
+            self.main_window.bind_all("<ButtonRelease-3>", self.next_panel)
         #
-        if self.vars.current_panel == START_FRAME:
+        if self.vars.current_panel in (START_FRAME, END_FRAME, START_AREA):
             self.tkvars.buttonstate.previous.set(tkinter.DISABLED)
         else:
             self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
         #
-        self.vars.trace = True
-        self.callbacks.update_buttons()
+        self.vars.update(trace=True)
         return 1
 
     def adjust_current_frame(self, new_current_frame):

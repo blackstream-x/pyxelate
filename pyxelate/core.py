@@ -110,8 +110,9 @@ MOUSE_DRAG_ACTIONS = {
 }
 
 # Grid parameters
-WITH_BORDER = dict(borderwidth=2, padx=5, pady=5, relief=tkinter.GROOVE)
+BUTTONS_GRID = dict(padx=5, pady=5, sticky=tkinter.E)
 GRID_FULLWIDTH = dict(padx=4, pady=2, sticky=tkinter.E + tkinter.W)
+WITH_BORDER = dict(borderwidth=2, padx=5, pady=5, relief=tkinter.GROOVE)
 
 
 #
@@ -1294,7 +1295,7 @@ class UserInterface:
         #
         self.vars.update(current_phase=next_phase)
 
-    def next_panel(self):
+    def next_panel(self, *unused_arguments):
         """Execute the next action and go to the next panel"""
         try:
             self.__next_action()
@@ -1340,7 +1341,7 @@ class UserInterface:
             self.main_window.destroy()
         #
 
-    def show_additional_buttons(self, buttons_area, buttons_grid):
+    def show_additional_buttons(self, buttons_area):
         """Additional buttons for the pixelate_image script.
         Return the number of rows (= the row index for th last row)
         """
@@ -1424,22 +1425,22 @@ class UserInterface:
         panel_method()
         self.widgets.action_area.grid(**GRID_FULLWIDTH)
         #
+        # Show global application buttons
         buttons_area = tkinter.Frame(self.widgets.action_area)
-        buttons_grid = dict(padx=5, pady=5, sticky=tkinter.E)
-        #
-        last_row = self.show_additional_buttons(buttons_area, buttons_grid)
+        last_row = self.show_additional_buttons(buttons_area)
+        self.callbacks.update_buttons()
         help_button = tkinter.Button(
             buttons_area, text="\u2753 Help", command=self.show_help
         )
-        help_button.grid(row=last_row, column=0, **buttons_grid)
         about_button = tkinter.Button(
             buttons_area, text="\u24d8 About", command=self.__show_about
         )
-        about_button.grid(row=last_row, column=1, **buttons_grid)
         quit_button = tkinter.Button(
             buttons_area, text="\u23fb Quit", command=self.quit
         )
-        quit_button.grid(row=last_row, column=2, **buttons_grid)
+        help_button.grid(row=last_row, column=0, **BUTTONS_GRID)
+        about_button.grid(row=last_row, column=1, **BUTTONS_GRID)
+        quit_button.grid(row=last_row, column=2, **BUTTONS_GRID)
         self.widgets.action_area.rowconfigure(2, weight=100)
         buttons_area.grid(row=3, column=1, sticky=tkinter.E)
         self.main_window.bind_all(
