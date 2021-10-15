@@ -77,9 +77,9 @@ except OSError as error:
 # Phases
 OPEN_FILE = core.UserInterface.phase_open_file
 START_FRAME = "start_frame"
-START_AREA = "start_area"
 END_FRAME = "end_frame"
-END_AREA = "end_area"
+START_AREA = "start_area"
+STOP_AREA = "stop_area"
 PREVIEW = "preview"
 
 PHASES = (
@@ -87,7 +87,7 @@ PHASES = (
     # START_FRAME,
     START_AREA,
     # END_FRAME,
-    END_AREA,
+    STOP_AREA,
     PREVIEW,
 )
 
@@ -95,14 +95,13 @@ PANEL_NAMES = {
     START_FRAME: "Select pixelation start frame",
     START_AREA: "Select pixelation start",
     END_FRAME: "Select pixelation end frame",
-    END_AREA: "Select pixelation end",
+    STOP_AREA: "Select pixelation end",
     PREVIEW: "Preview the video stream",
 }
 
 EMPTY_SELECTION = dict(
     frame=None,
     shape=None,
-    px_shape=None,
     center_x=None,
     center_y=None,
     width=None,
@@ -143,82 +142,57 @@ class Actions(core.InterfacePlugin):
 
     """Pre-panel actions for the video GUI in sequential order"""
 
-    def obsolete_start_frame(self):
-        """Actions before showing the start frame selection panel:
-        Set frame range from the first to the last but 5th frame.
-        """
-        self.application.adjust_frame_limits(maximum=self.vars.nb_frames - 5)
-
     def start_area(self):
         """Actions before showing the start area selection panel:
-        Fix the selected frame as start frame.
         Load the frame and set the variables
         """
-        self.application.adjust_frame_limits(maximum=self.vars.nb_frames - 5)
-        # Set selection (pre-configured or empty)
-        self.application.adjust_selection(self.vars.end_at)
-        self.vars.start_at.update(frame=self.tkvars.current_frame.get())
-        logging.debug("Current frame# is %r", self.vars.start_at.frame)
-        frame_file = pixelations.FRAME_PATTERN % self.vars.start_at.frame
+        self.application.adjust_frame_limits()
         self.vars.update(
-            frame_file=frame_file,
             image=pixelations.FramePixelation(
-                pathlib.Path(self.vars.original_frames.name) / frame_file,
+                pathlib.Path(self.vars.original_frames.name)
+                / self.vars.frame_file,
                 canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
             ),
-            frame_position="Start",
+            frame_position="Pixelation start",
         )
         if self.tkvars.crop.get():
             self.vars.image.set_crop_area(self.vars.crop_area)
         #
-        self.application.set_default_selection(tilesize=DEFAULT_TILESIZE)
+        try:
+            self.application.restore_coordinates(
+                self.vars.later_stations.pop()
+            )
+        except IndexError:
+            self.application.set_default_selection(tilesize=DEFAULT_TILESIZE)
+        #
         self.tkvars.drag_action.set(self.vars.previous_drag_action)
         # set the show_preview variable by default
         self.tkvars.show_preview.set(1)
 
-    def obsolete_end_frame(self):
-        """Actions before showing the end frame selection panel:
-        Set frame range from the selected start frame
-        to the last frame.
-        Fix the selected start coordinates
-        """
-        self.application.adjust_frame_limits(
-            minimum=self.vars.start_at.frame + 1
-        )
-        if self.vars.end_at.frame:
-            self.application.adjust_current_frame(self.vars.end_at.frame)
-        #
-        logging.debug("Fix start coordinates:")
-        self.application.store_selection(self.vars.start_at)
-
-    def end_area(self):
-        """Actions before showing the end area selection panel:
-        Fix the selected frame as end frame.
+    def stop_area(self):
+        """Actions before showing the stop area selection panel:
+        Save the coordinates
+        Fix the selected frame as start frame.
         Load the frame for area selection
         """
-        self.vars.start_at.update(frame=self.tkvars.current_frame.get())
-        logging.debug("Fixed start frame: #%s", self.vars.start_at.frame)
-        logging.debug("Fix start coordinates:")
-        self.application.store_selection(self.vars.start_at)
-        #
+        self.application.save_coordinates()
         self.application.adjust_frame_limits(
-            minimum=self.vars.start_at.frame + 1
+            minimum=self.tkvars.current_frame.get()
         )
-        if self.vars.end_at.frame:
-            self.application.adjust_current_frame(self.vars.end_at.frame)
-        else:
-            self.vars.end_at.update(frame=self.tkvars.current_frame.get())
+        try:
+            self.application.restore_coordinates(
+                self.vars.later_stations.pop()
+            )
+        except IndexError:
+            pass
         #
-        self.application.adjust_selection(self.vars.end_at)
-        logging.debug("Current frame# is %r", self.vars.end_at.frame)
-        frame_file = pixelations.FRAME_PATTERN % self.vars.end_at.frame
         self.vars.update(
-            frame_file=frame_file,
             image=pixelations.FramePixelation(
-                pathlib.Path(self.vars.original_frames.name) / frame_file,
+                pathlib.Path(self.vars.original_frames.name)
+                / self.vars.frame_file,
                 canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
             ),
-            frame_position="End",
+            frame_position="Pixelation stop",
         )
         if self.tkvars.crop.get():
             self.vars.image.set_crop_area(self.vars.crop_area)
@@ -229,17 +203,18 @@ class Actions(core.InterfacePlugin):
         Fix the selected end coordinates
         Apply the pixelations to all images
         """
-        self.vars.end_at.update(frame=self.tkvars.current_frame.get())
-        logging.debug("Fixed end frame: #%s", self.vars.end_at.frame)
-        logging.debug("Fix end coordinates:")
-        self.application.store_selection(self.vars.end_at)
-        #
-        # Keep start frame info
-        self.vars.opxsf.append(self.vars.start_at.frame)
+        self.application.save_coordinates()
+        self.application.adjust_frame_limits()
         self.vars.update(
-            spxsf=sorted(set(self.vars.opxsf)),
             modified_frames=tempfile.TemporaryDirectory(),
         )
+        # Set pixelations shape
+        px_shape = core.SHAPES[self.vars.stations[0]["shape"]]
+        for station_data in self.vars.stations:
+            if core.SHAPES[station_data["shape"]] != px_shape:
+                raise ValueError("Shapes at all stations must be the same!")
+            #
+        #
         logging.info("Created tempdir %r", self.vars.modified_frames.name)
         pixelator = pixelations.MultiFramePixelation(
             pathlib.Path(self.vars.original_frames.name),
@@ -252,16 +227,9 @@ class Actions(core.InterfacePlugin):
             label="Applying pixelation to selected frames …",
             maximum=100,
         )
-        # Set pixelations shape
-        px_shape = core.SHAPES[self.vars.start_at.shape]
-        if px_shape != core.SHAPES[self.vars.end_at.shape]:
-            raise ValueError("Shapes at start and end must be the same!")
-        #
         for percentage in pixelator.pixelate_frames(
-            self.tkvars.selection.tilesize.get(),
             px_shape,
-            self.vars.start_at,
-            self.vars.end_at,
+            self.vars.stations,
         ):
             progress.set_current_value(percentage)
         #
@@ -292,28 +260,8 @@ class VideoCallbacks(core.Callbacks):
             logging.warning("%s", error)
             return
         #
-        current_frame = self.tkvars.current_frame.get()
-        # logging.debug('Current frame# is %r', current_frame)
-        if current_frame < self.vars.frame_limits.minimum:
-            current_frame = self.vars.frame_limits.minimum
-            logging.warning(
-                "Raising current frame to minimum (%r)", current_frame
-            )
-        elif current_frame > self.vars.frame_limits.maximum:
-            current_frame = self.vars.frame_limits.maximum
-            logging.warning(
-                "Lowering current frame to maximum (%r)", current_frame
-            )
-        #
-        self.vars.update(trace=False)
-        self.tkvars.current_frame_text.set(str(current_frame))
-        if current_frame != self.tkvars.current_frame.get():
-            self.tkvars.current_frame.set(current_frame)
-        #
-        self.vars.update(
-            trace=True,
-            frame_file=pixelations.FRAME_PATTERN % current_frame,
-        )
+        # Adjust to current limits
+        self.application.adjust_current_frame()
         image_type = pixelations.BaseImage
         frame_path = (
             pathlib.Path(self.vars.original_frames.name) / self.vars.frame_file
@@ -326,7 +274,7 @@ class VideoCallbacks(core.Callbacks):
             if modified_path.is_file():
                 frame_path = modified_path
             #
-        elif self.vars.current_panel in (START_AREA, END_AREA):
+        elif self.vars.current_panel in (START_AREA, STOP_AREA):
             image_type = pixelations.FramePixelation
         #
         self.vars.update(
@@ -346,7 +294,7 @@ class VideoCallbacks(core.Callbacks):
             anchor=tkinter.NW,
             tags=core.TAG_IMAGE,
         )
-        if self.vars.current_panel in (START_AREA, END_AREA):
+        if self.vars.current_panel in (START_AREA, STOP_AREA):
             self.application.draw_indicator()
             self.application.pixelate_selection()
         #
@@ -416,8 +364,8 @@ class Panels(core.Panels):
         )
         self.widgets.canvas.grid()
         self.vars.trace = True
-        if self.vars.current_panel in (START_AREA, END_AREA, PREVIEW):
-            if self.vars.current_panel in (START_AREA, END_AREA):
+        if self.vars.current_panel in (START_AREA, STOP_AREA, PREVIEW):
+            if self.vars.current_panel in (START_AREA, STOP_AREA):
                 self.application.draw_indicator()
                 self.application.pixelate_selection()
             #
@@ -511,6 +459,25 @@ class Panels(core.Panels):
             column=0,
             columnspan=5,
         )
+        try:
+            save_button = tkinter.Button(
+                sidebar_frame,
+                text="\U0001f5ab Save",
+                command=self.application.save_file,
+            )
+        except tkinter.TclError:
+            # Mitigate Tkinter UnicodeError
+            save_button = tkinter.Button(
+                sidebar_frame,
+                text="\u2386 Save",
+                command=self.application.save_file,
+            )
+        #
+        save_button.grid(
+            sticky=tkinter.W,
+            column=0,
+            columnspan=5,
+        )
 
     def component_image_info(self, parent_frame):
         """Show information about the current video frame"""
@@ -542,7 +509,7 @@ class Panels(core.Panels):
             row=gui.grid_row_of(label),
         )
         self.component_zoom_factor(parent_frame)
-        if self.vars.current_panel in (START_AREA, END_AREA, PREVIEW):
+        if self.vars.current_panel in (START_AREA, STOP_AREA, PREVIEW):
             crop_active = tkinter.Checkbutton(
                 parent_frame,
                 anchor=tkinter.W,
@@ -605,7 +572,7 @@ class Panels(core.Panels):
         """
         self.component_frameselection()
 
-    def end_area(self):
+    def stop_area(self):
         """Show the image on a canvas and let
         the user select the area to be pixelated
         """
@@ -655,7 +622,7 @@ class Rollbacks(core.InterfacePlugin):
         self.application.adjust_selection(self.vars.start_at)
         self.vars.trace = True
 
-    def end_area(self):
+    def stop_area(self):
         """Actions when clicking the "previous" button
         in the end area selection panel:
         Set frame range from the first to the last but 5th frame.
@@ -691,7 +658,6 @@ class Rollbacks(core.InterfacePlugin):
         current_frame = self.vars.end_at.frame
         self.application.adjust_current_frame(current_frame)
         self.application.adjust_selection(self.vars.end_at)
-        self.vars.opxsf.pop()
         frame_file = pixelations.FRAME_PATTERN % current_frame
         self.vars.update(
             frame_file=frame_file,
@@ -700,7 +666,6 @@ class Rollbacks(core.InterfacePlugin):
                 canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
             ),
             frame_position="End",
-            spxsf=sorted(set(self.vars.opxsf)),
             trace=True,
         )
         self.vars.modified_frames.cleanup()
@@ -713,6 +678,8 @@ class VideoUI(core.UserInterface):
 
     phases = PHASES
     panel_names = PANEL_NAMES
+    looped_panels = {STOP_AREA}
+
     script_name = SCRIPT_NAME
     version = VERSION
     copyright_notice = COPYRIGHT_NOTICE
@@ -741,18 +708,17 @@ class VideoUI(core.UserInterface):
             modified_frames=None,
             nb_frames=None,
             has_audio=False,
-            # List of pixelation start frames
-            # (original sequence, and sorted unique)
-            opxsf=[],
-            spxsf=[],
             previous_drag_action=core.MOVE_SELECTION,
             frame_position=None,
             frame_file=None,
             frame_rate=None,
             frames_cache=None,
+            stations=[],
+            later_stations=[],
             duration_usec=None,
             unsaved_changes=False,
             frame_limits=core.Namespace(minimum=1, maximum=1),
+            kept_frames=core.Namespace(start=1, end=1),
             start_at=core.Namespace(**EMPTY_SELECTION),
             end_at=core.Namespace(**EMPTY_SELECTION),
         )
@@ -774,7 +740,7 @@ class VideoUI(core.UserInterface):
                 next_=self.callbacks.get_traced_stringvar(
                     "update_buttons", value=tkinter.NORMAL
                 ),
-                save=self.callbacks.get_traced_stringvar(
+                apply=self.callbacks.get_traced_stringvar(
                     "update_buttons", value=tkinter.DISABLED
                 ),
             ),
@@ -832,7 +798,7 @@ class VideoUI(core.UserInterface):
             )
         )
         logging.info("%r has audio: %r", file_path.name, has_audio)
-        self.vars.has_audio = has_audio
+        self.vars.update(has_audio=has_audio)
         label = tkinter.Label(progress.body, text="Examining video stream …")
         label.grid()
         progress.update_idletasks()
@@ -920,20 +886,21 @@ class VideoUI(core.UserInterface):
         self.vars.end_at.update(**EMPTY_SELECTION)
         # set the original path and displayed file name
         self.vars.update(original_path=file_path, unsaved_changes=False)
+        self.vars.kept_frames.update(start=1, end=self.vars.nb_frames)
+        self.vars.stations.clear()
+        self.vars.later_stations.clear()
         self.tkvars.file_name.set(file_path.name)
         self.tkvars.current_frame.set(1)
 
     def show_additional_buttons(self, buttons_area):
         """Additional buttons for the pixelate_image script"""
-        try:
-            save_button = tkinter.Button(
-                buttons_area, text="\U0001f5ab Save", command=self.save_file
-            )
-        except tkinter.TclError:
-            # Mitigate Tkinter UnicodeError
-            save_button = tkinter.Button(
-                buttons_area, text="\u2386 Save", command=self.save_file
-            )
+
+        def jump_to_preview():
+            """Inner function for jumping directly
+            to the preview panel
+            """
+            self.jump_to_panel(PREVIEW)
+
         #
         self.widgets.buttons.update(
             previous=tkinter.Button(
@@ -944,22 +911,29 @@ class VideoUI(core.UserInterface):
             next_=tkinter.Button(
                 buttons_area, text="\u25b7 Next", command=self.next_panel
             ),
-            save=save_button,
+            apply=tkinter.Button(
+                buttons_area,
+                text="\u2713 Apply",
+                command=jump_to_preview,
+            ),
         )
         self.widgets.buttons.previous.grid(
             row=0, column=0, **core.BUTTONS_GRID
         )
         self.widgets.buttons.next_.grid(row=0, column=1, **core.BUTTONS_GRID)
-        self.widgets.buttons.save.grid(row=0, column=2, **core.BUTTONS_GRID)
+        self.widgets.buttons.apply.grid(row=0, column=2, **core.BUTTONS_GRID)
         # Set button states and defer state manipulations
         self.vars.trace = False
         if self.vars.current_panel == PREVIEW:
-            self.tkvars.buttonstate.save.set(tkinter.NORMAL)
             self.tkvars.buttonstate.next_.set(tkinter.DISABLED)
             # right mouse click as shortcut for "Next"
             self.main_window.unbind_all("<ButtonRelease-3>")
         else:
-            self.tkvars.buttonstate.save.set(tkinter.DISABLED)
+            if self.vars.current_panel == STOP_AREA:
+                self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
+            else:
+                self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
+            #
             self.tkvars.buttonstate.next_.set(tkinter.NORMAL)
             # right mouse click as shortcut for "Next"
             self.main_window.bind_all("<ButtonRelease-3>", self.next_panel)
@@ -972,14 +946,41 @@ class VideoUI(core.UserInterface):
         self.vars.update(trace=True)
         return 1
 
-    def adjust_current_frame(self, new_current_frame):
-        """Adjust current frame without calling triggers"""
+    def adjust_current_frame(self, new_frame_number=None):
+        """Adjust current frame without calling triggers:
+        set to frame number if given,
+        and fix it if it is outside the allowed range
+        """
         previous_trace_setting = self.vars.trace
-        self.vars.trace = False
-        logging.debug("Setting current frame# to %r", new_current_frame)
-        self.tkvars.current_frame.set(new_current_frame)
-        self.tkvars.current_frame_text.set(str(new_current_frame))
-        self.vars.trace = previous_trace_setting
+        self.vars.update(trace=False)
+        old_frame_number = self.tkvars.current_frame.get()
+        if new_frame_number is None:
+            new_frame_number = old_frame_number
+        #
+        if new_frame_number < self.vars.frame_limits.minimum:
+            logging.warning(
+                "Raising frame# to minimum (%r)",
+                self.vars.frame_limits.minimum,
+            )
+            new_frame_number = self.vars.frame_limits.minimum
+        elif new_frame_number > self.vars.frame_limits.maximum:
+            new_frame_number = self.vars.frame_limits.maximum
+            logging.warning(
+                "Lowering frame# to maximum (%r)",
+                self.vars.frame_limits.maximum,
+            )
+            new_frame_number = self.vars.frame_limits.maximum
+        #
+        if new_frame_number != old_frame_number:
+            logging.debug("Setting frame# to %r", new_frame_number)
+            self.tkvars.current_frame.set(new_frame_number)
+        #
+        # set current_frame_text unconditionally
+        self.tkvars.current_frame_text.set(str(new_frame_number))
+        self.vars.update(
+            frame_file=pixelations.FRAME_PATTERN % new_frame_number,
+            trace=previous_trace_setting,
+        )
 
     def adjust_frame_limits(self, minimum=None, maximum=None):
         """Adjust frame limits without being restricted by
@@ -994,8 +995,9 @@ class VideoUI(core.UserInterface):
                 pass
             #
         #
-        self.vars.frame_limits.minimum = minimum or 1
-        self.vars.frame_limits.maximum = maximum or self.vars.nb_frames
+        self.vars.frame_limits.minimum = minimum or self.vars.kept_frames.start
+        self.vars.frame_limits.maximum = maximum or self.vars.kept_frames.end
+        self.adjust_current_frame()
 
     def clear_selection(self, storage_vars):
         """Clear selection in storage_vars"""
@@ -1010,28 +1012,45 @@ class VideoUI(core.UserInterface):
             storage_vars[item] = None
         #
 
-    def store_selection(self, storage_vars):
-        """Store selection in storage_vars"""
-        for item in storage_vars:
-            try:
-                source = self.tkvars.selection[item]
-            except KeyError:
-                continue
-            #
-            value = source.get()
-            logging.debug("Storing selection item %r: %r", item, value)
-            storage_vars[item] = value
+    def save_coordinates(self):
+        """Append coordinates (current frame and selection)
+        to the stations list
+        """
+        coordinates = dict(EMPTY_SELECTION)
+        current_frame = self.tkvars.current_frame.get()
+        logging.debug("Saving current frame#: %r", current_frame)
+        coordinates["frame"] = current_frame
+        for key, variable in self.tkvars.selection.items():
+            value = variable.get()
+            logging.debug("Saving selection item %r: %r", key, value)
+            coordinates[key] = variable.get()
         #
         # Respect quadratic shapes
-        if storage_vars["shape"] in core.QUADRATIC_SHAPES:
-            storage_vars["height"] = storage_vars["width"]
+        if coordinates["shape"] in core.QUADRATIC_SHAPES:
+            logging.debug(
+                "Quadratic shape %(shape)r,"
+                " changing height from %(height)r to %(width)r",
+                coordinates,
+            )
+            coordinates["height"] = coordinates["width"]
         #
+        self.vars.stations.append(coordinates)
 
-    def adjust_selection(self, new_selection_vars):
-        """Adjust selection without calling triggers"""
+    def pop_coordinates(self):
+        """Pop last coordinates from the stations list,
+        append them to the later_stations list,
+        and return them.
+        """
+        coordinates = self.vars.stations.pop()
+        self.vars.later_stations.append(coordinates)
+        return coordinates
+
+    def restore_coordinates(self, coordinates):
+        """Restore the provided coordinates"""
         previous_trace_setting = self.vars.trace
+        self.adjust_current_frame(coordinates["frame"])
         self.vars.update(trace=False)
-        for (item, value) in new_selection_vars.items():
+        for (item, value) in coordinates.items():
             try:
                 target = self.tkvars.selection[item]
             except KeyError:
@@ -1045,6 +1064,43 @@ class VideoUI(core.UserInterface):
         #
         self.vars.update(trace=previous_trace_setting)
 
+    # =============================================================================
+    #     def store_selection(self, storage_vars):
+    #         """Store selection in storage_vars"""
+    #         for item in storage_vars:
+    #             try:
+    #                 source = self.tkvars.selection[item]
+    #             except KeyError:
+    #                 continue
+    #             #
+    #             value = source.get()
+    #             logging.debug("Storing selection item %r: %r", item, value)
+    #             storage_vars[item] = value
+    #         #
+    #         # Respect quadratic shapes
+    #         if storage_vars["shape"] in core.QUADRATIC_SHAPES:
+    #             storage_vars["height"] = storage_vars["width"]
+    #         #
+    #
+    #     def adjust_selection(self, new_selection_vars):
+    #         """Adjust selection without calling triggers"""
+    #         previous_trace_setting = self.vars.trace
+    #         self.vars.update(trace=False)
+    #         for (item, value) in new_selection_vars.items():
+    #             try:
+    #                 target = self.tkvars.selection[item]
+    #             except KeyError:
+    #                 continue
+    #             #
+    #             if not value:
+    #                 continue
+    #             #
+    #             logging.debug("Setting selection item %r to %r", item, value)
+    #             target.set(value)
+    #         #
+    #         self.vars.update(trace=previous_trace_setting)
+    # =============================================================================
+
     def apply_and_recycle(self):
         """Apply changes to the frames,
         and re-cycle them as original frames
@@ -1056,18 +1112,23 @@ class VideoUI(core.UserInterface):
         self.vars.original_frames.cleanup()
         self.vars.update(original_frames=self.vars.modified_frames)
         self.vars.update(modified_frames=None)
-        # self.vars.trace = False
         # Clear end selection
         self.clear_selection(self.vars.end_at)
-        #
-        self.vars.update(current_panel=OPEN_FILE)
-        self.next_panel()
+        # Push current coordinates to self.vars.later_stations for re-use
+        self.vars.stations.clear()
+        self.vars.later_stations.clear()
+        self.save_coordinates()
+        self.pop_coordinates()
+        # Directly jump to start_area
+        self.jump_to_panel(START_AREA)
 
     def complete_modified_directory(self):
         """Fill up modified directory from souce directory"""
         original_path = pathlib.Path(self.vars.original_frames.name)
         target_path = pathlib.Path(self.vars.modified_frames.name)
-        for frame_number in range(1, self.vars.nb_frames + 1):
+        for frame_number in range(
+            self.vars.kept_frames.start, self.vars.kept_frames.end + 1
+        ):
             frame_file = pixelations.FRAME_PATTERN % frame_number
             frame_target_path = target_path / frame_file
             if not frame_target_path.exists():
@@ -1075,34 +1136,6 @@ class VideoUI(core.UserInterface):
                 frame_source_path.rename(frame_target_path)
             #
         #
-
-    def jump_next_px(self):
-        """Jump to the next pixelation start"""
-        current_frame = self.tkvars.current_frame.get()
-        try:
-            new_frameno = min(
-                frameno
-                for frameno in self.vars.spxsf
-                if frameno > current_frame
-            )
-        except ValueError:
-            return
-        #
-        self.tkvars.current_frame.set(new_frameno)
-
-    def jump_previous_px(self):
-        """Jump to the previous pixelation start"""
-        current_frame = self.tkvars.current_frame.get()
-        try:
-            new_frameno = max(
-                frameno
-                for frameno in self.vars.spxsf
-                if frameno < current_frame
-            )
-        except ValueError:
-            return
-        #
-        self.tkvars.current_frame.set(new_frameno)
 
     def play_flipbook(self):
         """Play current video as a flipbook"""

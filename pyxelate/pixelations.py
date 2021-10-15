@@ -668,7 +668,75 @@ class MultiFramePixelation:
         """
         return self.start[item] + round(self.gradients[item] * offset)
 
-    def pixelate_frames(self, tilesize, shape, start, end):
+    def pixelate_frames(self, shape, stations):
+        """Pixelate the frames and yield a progress fraction
+        stations must be a list of minimum 2 Namespaces or dicts
+        containing frame, tilesize, center_x, center_y, width and height
+        """
+        total_frames_diff = stations[-1]["frame"] - stations[0]["frame"]
+        if total_frames_diff < 1:
+            raise ValueError("The last frame must be after the first frame!")
+        #
+        total_frames = total_frames_diff + 1
+        first_iteration = True
+        while True:
+            start = stations.pop(0)
+            try:
+                end = stations[0]
+            except IndexError:
+                break
+            #
+            start_frame = start["frame"]
+            end_frame = end["frame"]
+            frames_diff = end_frame - start_frame
+            if frames_diff < 1:
+                logging.warning(
+                    "Each stop frame must be after the previous frame,"
+                    " ignoring this iteration!"
+                )
+                continue
+            #
+            self.start = start
+            self.gradients.clear()
+            for item in ("center_x", "center_y", "width", "height"):
+                self.gradients[item] = Fraction(
+                    end[item] - start[item], frames_diff
+                )
+            #
+            tilesize = end["tilesize"]
+            for current_frame in range(start_frame, end_frame + 1):
+                if current_frame == start_frame and not first_iteration:
+                    # Do not double-pixelate the overlapping frames
+                    continue
+                #
+                file_name = self.file_name_pattern % current_frame
+                source_frame = FramePixelation(
+                    self.source_path / file_name,
+                    canvas_size=None,
+                    tilesize=tilesize,
+                )
+                offset = current_frame - start_frame
+                source_frame.set_shape(
+                    (
+                        self.get_intermediate_value("center_x", offset),
+                        self.get_intermediate_value("center_y", offset),
+                    ),
+                    shape,
+                    (
+                        self.get_intermediate_value("width", offset),
+                        self.get_intermediate_value("height", offset),
+                    ),
+                )
+                source_frame.result.save(
+                    self.target_path / file_name, quality=self.quality
+                )
+                # logging.debug('Saved pixelated frame# %r', current_frame)
+                yield round(Fraction(100 * (offset + 1), total_frames))
+            #
+            first_iteration = False
+        #
+
+    def original_pixelate_frames(self, tilesize, shape, start, end):
         """Pixelate the frames and yield a progress fraction
         start and end must be Namespaces or dicts
         containing frame, center_x, center_y, width and height

@@ -930,6 +930,7 @@ class UserInterface:
     phase_open_file = "open_file"
     phases = (phase_open_file,)
     panel_names = {}
+    looped_panels = set()
 
     action_class = InterfacePlugin
     callback_class = Callbacks
@@ -965,6 +966,7 @@ class UserInterface:
             original_path=file_path,
             trace=False,
             unapplied_changes=False,
+            loop_counter={key: [] for key in self.looped_panels},
             undo_buffer=[],
             supported_drag_actions=[],
             drag_data=Namespace(
@@ -1243,7 +1245,7 @@ class UserInterface:
             center_y=center_y,
             width=min(sel_width, im_width),
             height=min(sel_height, im_height),
-            shape=self.tkvars.selection.shape.get() or OVAL,
+            shape=self.tkvars.selection.shape.get() or CIRCLE,
             tilesize=self.tkvars.selection.tilesize.get() or tilesize,
         )
 
@@ -1266,57 +1268,61 @@ class UserInterface:
         )
         canvas.tag_lower(TAG_IMAGE, TAG_INDICATOR)
 
-    def __next_action(self):
-        """Execute the next action"""
-        current_index = self.phases.index(self.vars.current_panel)
-        next_index = current_index + 1
+    def jump_to_panel(self, panel_name):
+        """Jump to the specified panel
+        after executing its action method
+        """
+        method_display = f"Action method for panel {panel_name!r}"
         try:
-            next_phase = self.phases[next_index]
-        except IndexError as error:
-            raise ValueError(
-                f"Phase number #{next_index} out of range"
-            ) from error
-        #
-        method_display = (
-            f"Action method for phase #{next_index} ({next_phase})"
-        )
-        try:
-            action_method = getattr(self.actions, next_phase)
+            action_method = getattr(self.actions, panel_name)
         except AttributeError:
             logging.debug("%s is undefined", method_display)
         else:
             try:
                 action_method()
-            except NotImplementedError as error:
-                raise ValueError(
+            except NotImplementedError:
+                self.vars.errors.append(
                     f"{method_display} has not been implemented yet"
-                ) from error
+                )
+            except ValueError as error:
+                self.vars.errors.append(str(error))
             #
         #
-        self.vars.update(current_phase=next_phase)
-
-    def next_panel(self, *unused_arguments):
-        """Execute the next action and go to the next panel"""
-        try:
-            self.__next_action()
-        except ValueError as error:
-            self.vars.errors.append(str(error))
-        #
+        self.vars.update(current_phase=panel_name)
         self.__show_panel()
 
+    def next_panel(self, *unused_arguments):
+        """Go to the next panel, executing its action method before"""
+        if self.vars.current_panel in self.looped_panels:
+            panel_name = self.vars.current_panel
+            self.vars.loop_counter[panel_name].append(False)
+        else:
+            current_index = self.phases.index(self.vars.current_panel)
+            next_index = current_index + 1
+            try:
+                panel_name = self.phases[next_index]
+            except IndexError:
+                self.vars.errors.append(
+                    f"Phase number #{next_index} out of range"
+                )
+            #
+        #
+        self.jump_to_panel(panel_name)
+
     def previous_panel(self):
-        """Go to the next panel"""
-        phase_name = self.vars.current_panel
-        phase_index = self.phases.index(phase_name)
+        """Go to the previous panel, executing the current panel’s
+        rollback method before.
+        """
+        panel_name = self.vars.current_panel
+        phase_index = self.phases.index(panel_name)
         method_display = (
-            f"Rollback method for phase #{phase_index} ({phase_name})"
+            f"Rollback method for panel #{phase_index} ({panel_name})"
         )
         try:
-            rollback_method = getattr(self.rollbacks, phase_name)
+            rollback_method = getattr(self.rollbacks, panel_name)
         except AttributeError:
             logging.warning("%s is undefined", method_display)
         else:
-            self.vars.update(current_phase=self.phases[phase_index - 1])
             try:
                 rollback_method()
             except NotImplementedError:
@@ -1324,8 +1330,23 @@ class UserInterface:
                     f"{method_display} has not been implemented yet"
                 )
             #
+            if panel_name not in self.looped_panels or self.go_back_allowed():
+                self.vars.update(current_phase=self.phases[phase_index - 1])
+            #
         #
         self.__show_panel()
+
+    def go_back_allowed(self):
+        """Return True if going back is allowed in a looped panel,
+        False if not.
+        The looped panel’s rollback medod is executed
+        directly before this method.
+        """
+        try:
+            return self.vars.loop_counter[self.vars.current_panel].pop()
+        except IndexError:
+            return False
+        #
 
     def pre_quit_check(self):
         """Pre-quit checks eg. for files to save.
