@@ -58,7 +58,7 @@ Export settings:
     FFmpeg preset. Slower presets provide better compression.
     According to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),
     the slowest preset you have patience for is recommended.
-    Default is 'slow'.
+    Default is 'ultrafast'.
   Include original audio: |
     If selected, the audio stream from the original video
     will be included in the exported video.
