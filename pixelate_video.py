@@ -461,7 +461,7 @@ class Panels(core.Panels):
         )
         save_button = tkinter.Button(
             sidebar_frame,
-            text="\u2b73 Save",
+            text="Save",
             command=self.application.save_file,
         )
         save_button.grid(
