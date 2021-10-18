@@ -678,6 +678,7 @@ class MultiFramePixelation:
             raise ValueError("The last frame must be after the first frame!")
         #
         total_frames = total_frames_diff + 1
+        exported_frames = 0
         first_iteration = True
         while True:
             start = stations.pop(0)
@@ -730,8 +731,11 @@ class MultiFramePixelation:
                 source_frame.result.save(
                     self.target_path / file_name, quality=self.quality
                 )
-                # logging.debug('Saved pixelated frame# %r', current_frame)
-                yield round(Fraction(100 * (offset + 1), total_frames))
+                exported_frames += 1
+                logging.debug(
+                    'Exported %r of % frames', exported_frames, total_frames
+                )
+                yield round(Fraction(100 * exported_frames, total_frames))
             #
             first_iteration = False
         #
