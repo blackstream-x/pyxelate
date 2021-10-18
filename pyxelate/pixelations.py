@@ -733,7 +733,7 @@ class MultiFramePixelation:
                 )
                 exported_frames += 1
                 logging.debug(
-                    'Exported %r of %r frames', exported_frames, total_frames
+                    "Exported %r of %r frames", exported_frames, total_frames
                 )
                 yield round(Fraction(100 * exported_frames, total_frames))
             #
