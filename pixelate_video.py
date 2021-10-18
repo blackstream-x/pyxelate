@@ -128,7 +128,7 @@ EXPORT_PRESETS = (
 )
 
 CANVAS_WIDTH = 720
-CANVAS_HEIGHT = 576
+CANVAS_HEIGHT = 540
 
 DEFAULT_TILESIZE = 10
 
@@ -307,7 +307,18 @@ class Callbacks(core.Callbacks):
         self.tkvars.current_frame.set(
             int(self.tkvars.current_frame_text.get())
         )
-        #
+
+    def frame_decrement(self, *unused_event):
+        """Decrement frame number"""
+        current_frame = self.tkvars.current_frame.get()
+        self.application.adjust_current_frame(current_frame - 1)
+        self.change_frame()
+
+    def frame_increment(self, *unused_event):
+        """increment frame number"""
+        current_frame = self.tkvars.current_frame.get()
+        self.application.adjust_current_frame(current_frame + 1)
+        self.change_frame()
 
     def toggle_crop_display(self, *unused_arguments):
         """Toggle crop area preview update"""
@@ -338,6 +349,23 @@ class Panels(core.Panels):
         image_frame = tkinter.Frame(
             self.widgets.action_area, **core.WITH_BORDER
         )
+        prev_button = tkinter.Button(
+            image_frame,
+            text='\u2190',
+            command=self.application.callbacks.frame_decrement,
+        )
+        label = tkinter.Label(
+            image_frame,
+            text=f"{self.vars.frame_position} frame",
+        )
+        next_button = tkinter.Button(
+            image_frame,
+            text='\u2192',
+            command=self.application.callbacks.frame_increment,
+        )
+        prev_button.grid(row=0, column=1, padx=5, pady=5)
+        label.grid(row=0, column=2, padx=5, pady=5)
+        next_button.grid(row=0, column=3, padx=5, pady=5)
         logging.debug("Destroying pre-existing slider")
         # Destroy a pre-existing widget to remove variable limits set before
         try:
@@ -355,15 +383,17 @@ class Panels(core.Panels):
             orient=tkinter.HORIZONTAL,
             variable=self.tkvars.current_frame,
         )
-        self.widgets.frames_slider.grid()
+        self.widgets.frames_slider.grid(columnspan=5)
         logging.debug("Showing canvas")
         self.widgets.canvas = tkinter.Canvas(
             image_frame,
             width=self.vars.canvas_width,
             height=self.vars.canvas_height,
         )
-        self.widgets.canvas.grid()
-        self.vars.trace = True
+        self.widgets.canvas.grid(columnspan=5)
+        image_frame.columnconfigure(0, weight=100)
+        image_frame.columnconfigure(4, weight=100)
+        self.vars.update(trace=True)
         if self.vars.current_panel in (START_AREA, STOP_AREA, PREVIEW):
             if self.vars.current_panel in (START_AREA, STOP_AREA):
                 self.application.draw_indicator()
@@ -537,15 +567,15 @@ class Panels(core.Panels):
         self.component_select_drag_action(
             sidebar_frame, supported_actions=[core.NEW_CROP_AREA]
         )
+        self.component_add_another(sidebar_frame)
         sidebar_frame.columnconfigure(4, weight=100)
         sidebar_frame.grid(row=0, column=1, rowspan=2, **core.GRID_FULLWIDTH)
 
-    def sidebar_apply_export(self):
-        """Show the apply / export sidebar"""
+    def sidebar_export(self):
+        """Show the export sidebar"""
         sidebar_frame = tkinter.Frame(
             self.widgets.action_area, **core.WITH_BORDER
         )
-        self.component_add_another(sidebar_frame)
         self.component_export_settings(sidebar_frame)
         sidebar_frame.columnconfigure(4, weight=100)
         sidebar_frame.grid(row=2, column=1, **core.GRID_FULLWIDTH)
@@ -587,7 +617,7 @@ class Panels(core.Panels):
         """Show a slider allowing to preview the modified video"""
         self.component_image_on_canvas()
         self.sidebar_preview()
-        self.sidebar_apply_export()
+        self.sidebar_export()
 
 
 class Rollbacks(core.InterfacePlugin):
@@ -1136,6 +1166,8 @@ class VideoUI(core.UserInterface):
         else:
             self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
         #
+        self.main_window.bind_all("<Left>", self.callbacks.frame_decrement)
+        self.main_window.bind_all("<Right>", self.callbacks.frame_increment)
         self.vars.update(trace=True)
         return 1
 

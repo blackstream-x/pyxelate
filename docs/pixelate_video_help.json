@@ -11,13 +11,13 @@
     "Zoom factor": "Shows the zoom factor of the loaded frame",
     "Crop video": "If selected, the video will be cropped when exporting.\nThe darkened frame will be cut off.\n"
   },
-  "End frame": {
-    "Number": "The number of the current pixelation end frame",
+  "Pixelation start frame": {
+    "Number": "The number of the current pixelation start frame",
     "Zoom factor": "Shows the zoom factor of the loaded frame",
     "Crop video": "If selected, the video will be cropped when exporting.\nThe darkened frame will be cut off.\n"
   },
-  "Start frame": {
-    "Number": "The number of the current pixelation start frame",
+  "Pixelation stop frame": {
+    "Number": "The number of the current pixelation stop frame",
     "Zoom factor": "Shows the zoom factor of the loaded frame",
     "Crop video": "If selected, the video will be cropped when exporting.\nThe darkened frame will be cut off.\n"
   },
