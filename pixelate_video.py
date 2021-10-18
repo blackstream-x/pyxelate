@@ -94,8 +94,8 @@ PHASES = (
 PANEL_NAMES = {
     FIRST_FRAME: "Cut video at beginning",
     LAST_FRAME: "Cut video at end",
-    START_AREA: "Select pixelation start",
-    STOP_AREA: "Select pixelation end",
+    START_AREA: "Select pixelation start frame and area. Then right-click (or 'Next')",
+    STOP_AREA: "Select pixelation end frame and area. Then right-click (or 'Next'), then 'Apply'",
     PREVIEW: "Preview/Export",
 }
 
@@ -392,15 +392,15 @@ class Panels(core.Panels):
         )
         label = tkinter.Label(
             image_frame,
-            text=f"{self.vars.frame_position} frame",
+            text=f"{self.vars.frame_position} frame fine-tune:",
         )
         next_button = tkinter.Button(
             image_frame,
             text='\u2192',
             command=self.application.callbacks.frame_increment,
         )
-        prev_button.grid(row=0, column=1, padx=5, pady=5)
-        label.grid(row=0, column=2, padx=5, pady=5)
+        label.grid(row=0, column=1, padx=5, pady=5)
+        prev_button.grid(row=0, column=2, padx=5, pady=5)
         next_button.grid(row=0, column=3, padx=5, pady=5)
         logging.debug("Destroying pre-existing slider")
         # Destroy a pre-existing widget to remove variable limits set before
@@ -453,19 +453,19 @@ class Panels(core.Panels):
 
     def component_frameselection(self):
         """Select the start or end frame using a slider
-        abd show that frame on a canvas
+        and show that frame on a canvas
         """
         self.component_image_on_canvas()
         self.sidebar_frameselection()
 
     def component_add_another(self, sidebar_frame):
-        """Section with the 'Add another pixelation' button"""
+        """Section with the 'Add another pixelation segment' button"""
         self.application.heading_with_help_button(
             sidebar_frame, "More pixelations"
         )
         more_button = tkinter.Button(
             sidebar_frame,
-            text="Add another pixelation",
+            text="Add another pixelation segment",
             command=self.application.apply_and_recycle,
         )
         more_button.grid(sticky=tkinter.W, columnspan=4)
