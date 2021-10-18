@@ -93,9 +93,9 @@ PHASES = (
 
 PANEL_NAMES = {
     START_FRAME: "Select pixelation start frame",
-    START_AREA: "Select pixelation start",
+    START_AREA: "Select pixelation start frame and area. Then right-click (or 'Next')",
     END_FRAME: "Select pixelation end frame",
-    STOP_AREA: "Select pixelation end",
+    STOP_AREA: "Select pixelation end frame and area. Then right-click (or 'Next'), then 'Apply'",
     PREVIEW: "Preview/Export",
 }
 
