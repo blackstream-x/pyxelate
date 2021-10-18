@@ -673,13 +673,14 @@ class MultiFramePixelation:
         stations must be a list of minimum 2 Namespaces or dicts
         containing frame, tilesize, center_x, center_y, width and height
         """
-        total_frames = 1 + stations[-1]["frame"] - stations[0]["frame"]
+        route_stops = stations[:]
+        total_frames = 1 + route_stops[-1]["frame"] - route_stops[0]["frame"]
         exported_frames = 0
         first_iteration = True
         while True:
-            start = stations.pop(0)
+            start = route_stops.pop(0)
             try:
-                end = stations[0]
+                end = route_stops[0]
             except IndexError:
                 break
             #
