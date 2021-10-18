@@ -15,12 +15,13 @@ is a shortcut for clicking the `▷ Next` button.
    all frames after the selected one will be discarded.)_
 3. Select pixelation start by selecting frame and area.
 4. Select pixelation stop by selecting frame and area.
-   _(tba: Normally, clicking the `▷ Next` button will take you to the following panel.
+   Normally, clicking the `▷ Next` button will take you to the following panel.
    This panel behaves differently: it is repeated until you click the `✓ Apply` button,
    allowing chained pixelations to break up non-linear movements of objects
-   in the video indo smaller linear movement steps.)_
+   in the video into smaller linear movement sections.
 5. The pixelation is applied using linear movements of the pixelated area
-   between the consecutive “stations” selected in the previous panels.
+   in each section between the consecutive “stations” of the
+   pixelation route selected in the previous panels.
    You can review the whole clip flip book style, and you can save the video,
    and/or jump to the pixelation start selection panel (#3) for an additional pixelation.
 

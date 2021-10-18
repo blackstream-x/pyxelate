@@ -96,7 +96,7 @@ PANEL_NAMES = {
     START_AREA: "Select pixelation start",
     END_FRAME: "Select pixelation end frame",
     STOP_AREA: "Select pixelation end",
-    PREVIEW: "Preview the video stream",
+    PREVIEW: "Preview/Export",
 }
 
 EMPTY_SELECTION = dict(
@@ -1136,7 +1136,16 @@ class VideoUI(core.UserInterface):
         self,
     ):
         """Checks and actions before exiting the application"""
-        if self.vars.unsaved_changes:
+        if self.vars.current_panel == STOP_AREA:
+            if messagebox.askyesno(
+                "Unapplied pixelation",
+                "The current pixelation route will be lost if you quit now.\n"
+                "Show the %r panel instead?" % self.panel_names[PREVIEW],
+            ):
+                self.jump_to_panel(PREVIEW)
+                return False
+            #
+        elif self.vars.unsaved_changes:
             if messagebox.askyesno("Unsaved Changes", "Save your changes?"):
                 if not self.save_file():
                     if not messagebox.askokcancel(
