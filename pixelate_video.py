@@ -92,10 +92,10 @@ PHASES = (
 )
 
 PANEL_NAMES = {
-    FIRST_FRAME: "Cut video at beginning",
-    LAST_FRAME: "Cut video at end",
-    START_AREA: "Select pixelation start frame and area. Then right-click (or 'Next')",
-    STOP_AREA: "Select pixelation end frame and area. Then right-click (or 'Next'), then 'Apply'",
+    FIRST_FRAME: "Cut your video: select the wanted video begin, then right-click (or 'Next')",
+    LAST_FRAME: "Cut your video: select the wanted video end, then right-click (or 'Next')",
+    START_AREA: "Pixelate a segment: select a start frame and area, then right-click (or 'Next')",
+    STOP_AREA: "Pixelate a segment: select an end frame and area, then right-click (or 'Next'), then 'Apply'",
     PREVIEW: "Preview/Export",
 }
 
@@ -151,7 +151,7 @@ class Actions(core.InterfacePlugin):
                 / self.vars.frame_file,
                 canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
             ),
-            frame_position="First video",
+            frame_position="Select first video",
         )
 
     def last_frame(self):
@@ -168,7 +168,7 @@ class Actions(core.InterfacePlugin):
                 / self.vars.frame_file,
                 canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
             ),
-            frame_position="Last video",
+            frame_position="Select last video",
         )
 
     def start_area(self):
