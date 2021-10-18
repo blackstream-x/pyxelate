@@ -459,20 +459,11 @@ class Panels(core.Panels):
             column=0,
             columnspan=5,
         )
-        try:
-            save_button = tkinter.Button(
-                sidebar_frame,
-                text="\U0001f5ab Save",
-                command=self.application.save_file,
-            )
-        except tkinter.TclError:
-            # Mitigate Tkinter UnicodeError
-            save_button = tkinter.Button(
-                sidebar_frame,
-                text="\u2386 Save",
-                command=self.application.save_file,
-            )
-        #
+        save_button = tkinter.Button(
+            sidebar_frame,
+            text="\u2b73 Save",
+            command=self.application.save_file,
+        )
         save_button.grid(
             sticky=tkinter.W,
             column=0,

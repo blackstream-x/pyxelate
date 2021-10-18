@@ -1457,7 +1457,7 @@ class UserInterface:
             buttons_area, text="\u24d8 About", command=self.__show_about
         )
         quit_button = tkinter.Button(
-            buttons_area, text="\u23fb Quit", command=self.quit
+            buttons_area, text="\u2717 Quit", command=self.quit
         )
         help_button.grid(row=last_row, column=0, **BUTTONS_GRID)
         about_button.grid(row=last_row, column=1, **BUTTONS_GRID)

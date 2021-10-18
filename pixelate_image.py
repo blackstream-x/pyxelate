@@ -422,16 +422,6 @@ class ImageUI(core.UserInterface):
 
     def show_additional_buttons(self, buttons_area):
         """Additional buttons for the pixelate_image script"""
-        try:
-            save_button = tkinter.Button(
-                buttons_area, text="\U0001f5ab Save", command=self.save_file
-            )
-        except tkinter.TclError:
-            # Mitigate Tkinter UnicodeError
-            save_button = tkinter.Button(
-                buttons_area, text="\u2386 Save", command=self.save_file
-            )
-        #
         self.widgets.buttons.update(
             undo=tkinter.Button(
                 buttons_area,
@@ -443,7 +433,11 @@ class ImageUI(core.UserInterface):
                 text="\u2713 Apply",
                 command=self.apply_pixelation,
             ),
-            save=save_button,
+            save=tkinter.Button(
+                buttons_area,
+                text="\u2b73 Save",
+                command=self.application.save_file,
+            ),
         )
         self.widgets.buttons.undo.grid(row=0, column=0, **core.BUTTONS_GRID)
         self.widgets.buttons.apply.grid(row=0, column=1, **core.BUTTONS_GRID)

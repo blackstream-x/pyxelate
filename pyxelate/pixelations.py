@@ -666,18 +666,14 @@ class MultiFramePixelation:
         """Get the intermediate value
         at frame# start.frame + offset
         """
-        return self.start[item] + round(self.gradients[item] * offset)
+        return self.start[item] + round(self.gradients.get(item, 0) * offset)
 
     def pixelate_frames(self, shape, stations):
         """Pixelate the frames and yield a progress fraction
         stations must be a list of minimum 2 Namespaces or dicts
         containing frame, tilesize, center_x, center_y, width and height
         """
-        total_frames_diff = stations[-1]["frame"] - stations[0]["frame"]
-        if total_frames_diff < 1:
-            raise ValueError("The last frame must be after the first frame!")
-        #
-        total_frames = total_frames_diff + 1
+        total_frames = 1 + stations[-1]["frame"] - stations[0]["frame"]
         exported_frames = 0
         first_iteration = True
         while True:
@@ -690,19 +686,23 @@ class MultiFramePixelation:
             start_frame = start["frame"]
             end_frame = end["frame"]
             frames_diff = end_frame - start_frame
-            if frames_diff < 1:
+            if frames_diff < 0:
                 logging.warning(
-                    "Each stop frame must be after the previous frame,"
-                    " ignoring this iteration!"
+                    "Stations not in sequential frame order,"
+                    " ignoring this section!"
                 )
                 continue
             #
             self.start = start
             self.gradients.clear()
-            for item in ("center_x", "center_y", "width", "height"):
-                self.gradients[item] = Fraction(
-                    end[item] - start[item], frames_diff
-                )
+            try:
+                for item in ("center_x", "center_y", "width", "height"):
+                    self.gradients[item] = Fraction(
+                        end[item] - start[item], frames_diff
+                    )
+                #
+            except ZeroDivisionError:
+                pass
             #
             tilesize = end["tilesize"]
             for current_frame in range(start_frame, end_frame + 1):
