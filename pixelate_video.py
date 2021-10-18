@@ -76,25 +76,25 @@ except OSError as error:
 
 # Phases
 OPEN_FILE = core.UserInterface.phase_open_file
-START_FRAME = "start_frame"
-END_FRAME = "end_frame"
+FIRST_FRAME = "first_frame"
+LAST_FRAME = "last_frame"
 START_AREA = "start_area"
 STOP_AREA = "stop_area"
 PREVIEW = "preview"
 
 PHASES = (
     OPEN_FILE,
-    # START_FRAME,
+    FIRST_FRAME,
+    LAST_FRAME,
     START_AREA,
-    # END_FRAME,
     STOP_AREA,
     PREVIEW,
 )
 
 PANEL_NAMES = {
-    START_FRAME: "Select pixelation start frame",
+    FIRST_FRAME: "Cut video at beginning",
+    LAST_FRAME: "Cut video at end",
     START_AREA: "Select pixelation start",
-    END_FRAME: "Select pixelation end frame",
     STOP_AREA: "Select pixelation end",
     PREVIEW: "Preview/Export",
 }
@@ -142,10 +142,45 @@ class Actions(core.InterfacePlugin):
 
     """Pre-panel actions for the video GUI in sequential order"""
 
+    def first_frame(self):
+        """Actions before showing "first frame" selection"""
+        self.application.adjust_frame_limits()
+        self.vars.update(
+            image=pixelations.BasePixelation(
+                pathlib.Path(self.vars.original_frames.name)
+                / self.vars.frame_file,
+                canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
+            ),
+            frame_position="First video",
+        )
+
+    def last_frame(self):
+        """Actions before showing "first frame" selection"""
+        self.vars.kept_frames.update(start=self.tkvars.current_frame.get())
+        self.application.cut_video(
+            to_=self.vars.kept_frames.start - 1,
+        )
+        self.application.adjust_current_frame(self.vars.kept_frames.end)
+        self.application.adjust_frame_limits()
+        self.vars.update(
+            image=pixelations.BasePixelation(
+                pathlib.Path(self.vars.original_frames.name)
+                / self.vars.frame_file,
+                canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
+            ),
+            frame_position="Last video",
+        )
+
     def start_area(self):
         """Actions before showing the start area selection panel:
         Load the frame and set the variables
         """
+        if self.vars.current_panel == LAST_FRAME:
+            self.vars.kept_frames.update(end=self.tkvars.current_frame.get())
+            self.application.cut_video(
+                from_=self.vars.kept_frames.end + 1,
+            )
+        #
         self.application.adjust_frame_limits()
         self.vars.update(
             image=pixelations.FramePixelation(
@@ -161,6 +196,7 @@ class Actions(core.InterfacePlugin):
         try:
             self.application.apply_coordinates(self.vars.later_stations.pop())
         except IndexError:
+            self.application.adjust_current_frame(self.vars.kept_frames.start)
             self.application.set_default_selection(tilesize=DEFAULT_TILESIZE)
         #
         self.tkvars.drag_action.set(self.vars.previous_drag_action)
@@ -325,7 +361,7 @@ class Callbacks(core.Callbacks):
         if not self.vars.trace:
             return
         #
-        if self.vars.current_panel in (PREVIEW, START_FRAME, END_FRAME):
+        if self.vars.current_panel in (PREVIEW, FIRST_FRAME, LAST_FRAME):
             self.change_frame()
             return
         #
@@ -547,13 +583,13 @@ class Panels(core.Panels):
 
     def sidebar_frameselection(self):
         """Show the frame selection sidebar"""
-        frameselection_frame = tkinter.Frame(
+        sidebar_frame = tkinter.Frame(
             self.widgets.action_area, **core.WITH_BORDER
         )
-        self.component_file_info(frameselection_frame)
-        self.component_image_info(frameselection_frame)
-        frameselection_frame.columnconfigure(4, weight=100)
-        frameselection_frame.grid(
+        self.component_file_info(sidebar_frame)
+        self.component_image_info(sidebar_frame)
+        sidebar_frame.columnconfigure(4, weight=100)
+        sidebar_frame.grid(
             row=0, column=1, rowspan=2, **core.GRID_FULLWIDTH
         )
 
@@ -582,11 +618,14 @@ class Panels(core.Panels):
 
     # Panels in order of appearance
 
-    def obsolete_start_frame(self):
-        """Select the start frame using a slider
+    def first_frame(self):
+        """Select the first frame using a slider
         and show that frame on a canvas
         """
-        self.component_frameselection()
+        self.component_image_on_canvas()
+        self.sidebar_frameselection()
+
+    last_frame = first_frame
 
     def start_area(self):
         """Show the image on a canvas and let
@@ -594,12 +633,6 @@ class Panels(core.Panels):
         """
         self.component_image_on_canvas()
         self.sidebar_settings()
-
-    def obsolete_end_frame(self):
-        """Select the end frame using a slider
-        and show that frame on a canvas
-        """
-        self.component_frameselection()
 
     def stop_area(self):
         """Show the image on a canvas and let
@@ -870,6 +903,36 @@ class VideoUI(core.UserInterface):
             #
         #
 
+    def cut_video(self, from_=None, to_=None):
+        """Remove frame files from_ to to_"""
+        if from_ is None:
+            value = 1
+            logging.debug("Setting from_ frame# to %r!", value)
+            from_ = value
+        #
+        if to_ is None:
+            value = self.vars.nb_frames
+            logging.debug("Setting to_ frame# to %r!", value)
+            to_ = value
+        #
+        if to_ < from_:
+            logging.error("Cut range (%r-%r) is inconsistent", from_, to_)
+            return
+        #
+        original_path = pathlib.Path(self.vars.original_frames.name)
+        range_upper = to_ + 1
+        logging.debug(
+            'Deleting %r files from %s ...',
+            range_upper - from_,
+            original_path,
+        )
+        for frame_number in range(from_, range_upper):
+            frame_file = pixelations.FRAME_PATTERN % frame_number
+            logging.debug("Removing %s", frame_file)
+            frame_path = original_path / frame_file
+            frame_path.unlink()
+        #
+
     def __examine_video(self, file_path):
         """Examine the video and set the video properties variables"""
         progress = gui.TransientWindow(
@@ -1045,12 +1108,30 @@ class VideoUI(core.UserInterface):
         arguments = [
             "-framerate",
             str(self.vars.frame_rate),
-            "-i",
-            os.path.join(
-                self.vars.modified_frames.name, pixelations.FRAME_PATTERN
-            ),
         ]
+        cut_at_start = self.vars.kept_frames.start - 1
+        if cut_at_start:
+            arguments.extend(
+                ["-start_number", str(self.vars.kept_frames.start)]
+            )
+        #
+        arguments.extend(
+            [
+                "-i",
+                os.path.join(
+                    self.vars.modified_frames.name, pixelations.FRAME_PATTERN
+                ),
+            ]
+        )
         if self.tkvars.export.include_audio.get():
+            if cut_at_start:
+                arguments.extend(
+                    [
+                        "-ss",
+                        "%.3f" % float(cut_at_start / self.vars.frame_rate),
+                    ]
+                )
+            #
             arguments.extend(
                 [
                     "-i",
@@ -1063,6 +1144,9 @@ class VideoUI(core.UserInterface):
                     "copy",
                 ]
             )
+            if cut_at_start or self.vars.kept_frames.end < self.vars.nb_frames:
+                arguments.append("-shortest")
+            #
         #
         if self.tkvars.crop.get():
             width = self.vars.crop_area.right - self.vars.crop_area.left
@@ -1148,6 +1232,7 @@ class VideoUI(core.UserInterface):
         # Set button states and defer state manipulations
         self.vars.trace = False
         if self.vars.current_panel == PREVIEW:
+            self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
             self.tkvars.buttonstate.next_.set(tkinter.DISABLED)
             # right mouse click as shortcut for "Next"
             self.main_window.unbind_all("<ButtonRelease-3>")
@@ -1161,7 +1246,7 @@ class VideoUI(core.UserInterface):
             # right mouse click as shortcut for "Next"
             self.main_window.bind_all("<ButtonRelease-3>", self.next_panel)
         #
-        if self.vars.current_panel in (START_FRAME, END_FRAME, START_AREA):
+        if self.vars.current_panel in (FIRST_FRAME, LAST_FRAME, START_AREA):
             self.tkvars.buttonstate.previous.set(tkinter.DISABLED)
         else:
             self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
