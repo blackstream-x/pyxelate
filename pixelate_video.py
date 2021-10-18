@@ -387,7 +387,7 @@ class Panels(core.Panels):
         )
         prev_button = tkinter.Button(
             image_frame,
-            text='\u2190',
+            text="\u2190",
             command=self.application.callbacks.frame_decrement,
         )
         label = tkinter.Label(
@@ -396,7 +396,7 @@ class Panels(core.Panels):
         )
         next_button = tkinter.Button(
             image_frame,
-            text='\u2192',
+            text="\u2192",
             command=self.application.callbacks.frame_increment,
         )
         label.grid(row=0, column=1, padx=5, pady=5)
@@ -589,9 +589,7 @@ class Panels(core.Panels):
         self.component_file_info(sidebar_frame)
         self.component_image_info(sidebar_frame)
         sidebar_frame.columnconfigure(4, weight=100)
-        sidebar_frame.grid(
-            row=0, column=1, rowspan=2, **core.GRID_FULLWIDTH
-        )
+        sidebar_frame.grid(row=0, column=1, rowspan=2, **core.GRID_FULLWIDTH)
 
     def sidebar_preview(self):
         """Show the preview sidebar"""
@@ -922,7 +920,7 @@ class VideoUI(core.UserInterface):
         original_path = pathlib.Path(self.vars.original_frames.name)
         range_upper = to_ + 1
         logging.debug(
-            'Deleting %r files from %s ...',
+            "Deleting %r files from %s ...",
             range_upper - from_,
             original_path,
         )
