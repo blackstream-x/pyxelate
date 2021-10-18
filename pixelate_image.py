@@ -138,7 +138,7 @@ class FrozenSelection:
         return repr(tuple(self.effective_values.values()))
 
 
-class ImageCallbacks(core.Callbacks):
+class Callbacks(core.Callbacks):
 
     """Callbacks for the new user interface"""
 
@@ -212,7 +212,7 @@ class ImageUI(core.UserInterface):
     version = VERSION
     copyright_notice = COPYRIGHT_NOTICE
 
-    callback_class = ImageCallbacks
+    callback_class = Callbacks
     panel_class = Panels
 
     def __init__(self, file_path, options):
@@ -435,8 +435,8 @@ class ImageUI(core.UserInterface):
             ),
             save=tkinter.Button(
                 buttons_area,
-                text="\u2b73 Save",
-                command=self.application.save_file,
+                text="\u2386 Save",
+                command=self.save_file,
             ),
         )
         self.widgets.buttons.undo.grid(row=0, column=0, **core.BUTTONS_GRID)

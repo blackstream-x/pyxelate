@@ -913,11 +913,11 @@ class Panels(InterfacePlugin):
         settings_frame = tkinter.Frame(self.widgets.action_area, **WITH_BORDER)
         self.component_file_info(settings_frame)
         self.component_image_info(settings_frame)
+        self.component_select_drag_action(settings_frame)
         self.component_shape_settings(
             settings_frame,
             allowed_shapes=allowed_shapes,
         )
-        self.component_select_drag_action(settings_frame)
         settings_frame.columnconfigure(4, weight=100)
         settings_frame.grid(row=0, column=1, rowspan=2, **GRID_FULLWIDTH)
         self.application.toggle_height()

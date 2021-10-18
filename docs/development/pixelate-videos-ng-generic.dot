@@ -4,7 +4,9 @@ load_video[label="Load video", shape=rect]
 preprocess_video[label="Preprocess video:\nde-shake if possible\nand requested,\ncut if requested,\nsplit into frames", shape=Mcircle]
 new_pixelation[shape=point, style=invis]
 start_position[label="Select pixelation\nstart frame\nand position", shape=rect]
-end_position[label="Select pixelation\nend frame\nand position", shape=rect]
+additional_stop_position[shape=point, style=invis]
+stop_position[label="Select pixelation\nstop frame\nand position", shape=rect]
+add_stop_position[label="Add another\nstop?", shape=diamond]
 apply_pixelation[label="Pixelate\nframe range", shape=parallelogram]
 show_preview[label="Show preview\nas a flip book", shape=rect]
 add_pixelation[label="Add another\npixelation?", shape=diamond]
@@ -15,9 +17,9 @@ quit[label="Quit", shape=rect]
 in_original_video[label="Original\nvideo", shape=cylinder]
 out_original_frames[label="Original\nframes", shape=cylinder]
 in_start_frame[label="Start frame", shape=note]
-out_start_position[label="Start frame\nStart position\nCrop area", shape=note]
-out_end_position[label="End frame\nEnd position\nCrop area", shape=note]
-in_frames_and_positions[label="Start frame\nStart position\nEnd frame\nEnd position", shape=note]
+out_start_position[label="Start frame + position\nCrop area", shape=note]
+out_stop_position[label="Stop frame + position\nCrop area", shape=note]
+in_frames_and_positions[label="Start frame + position\nStop #1 frame + position\n...\nStop #n frame + position", shape=note]
 in_original_frames_1[label="Original\nframes", shape=cylinder]
 in_original_frames_2[label="Original\nframes", shape=cylinder]
 in_original_frames_3[label="Original\nframes", shape=cylinder]
@@ -33,11 +35,15 @@ anytime_load[label="any\ntime", shape=circle]
 anytime_quit[label="any\ntime", shape=circle]
 additional_pixelation_1[label="B", shape=circle]
 additional_pixelation_2[label="B", shape=circle]
+additional_station_1[label="C", shape=circle]
+additional_station_2[label="C", shape=circle]
 
 {rank=same; in_original_video; preprocess_video; out_original_frames}
 {rank=same; additional_pixelation_1; new_pixelation}
 {rank=same; in_original_frames_1; start_position; out_start_position}
-{rank=same; in_original_frames_2; in_start_frame; end_position; out_end_position}
+{rank=same; additional_station_1; additional_stop_position}
+{rank=same; in_original_frames_2; in_start_frame; stop_position; out_stop_position}
+{rank=same; add_stop_position; additional_station_2}
 {rank=same; in_original_frames_3; in_frames_and_positions; apply_pixelation; out_modified_frames}
 {rank=same; in_modified_frames_1; show_preview; out_crop_area}
 {rank=same; add_pixelation; additional_pixelation_2}
@@ -54,9 +60,13 @@ preprocess_video -> new_pixelation;
 additional_pixelation_1 -> new_pixelation;
 new_pixelation -> start_position;
 in_original_frames_1 -> start_position -> out_start_position;
-start_position -> end_position;
-in_original_frames_2 -> in_start_frame -> end_position -> out_end_position;
-end_position -> apply_pixelation;
+start_position -> additional_stop_position;
+additional_station_1 -> additional_stop_position;
+additional_stop_position -> stop_position;
+in_original_frames_2 -> in_start_frame -> stop_position -> out_stop_position;
+stop_position -> add_stop_position;
+add_stop_position -> additional_station_2[label="yes"];
+add_stop_position -> apply_pixelation[label="no"];
 in_original_frames_3 -> in_frames_and_positions -> apply_pixelation -> out_modified_frames;
 apply_pixelation -> show_preview;
 in_modified_frames_1 -> show_preview -> out_crop_area;
