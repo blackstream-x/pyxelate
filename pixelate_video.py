@@ -132,6 +132,8 @@ CANVAS_HEIGHT = 540
 
 DEFAULT_TILESIZE = 10
 
+BUTTONS_GRID = dict(padx=3, pady=3, sticky=tkinter.W)
+
 
 #
 # Classes
@@ -369,9 +371,12 @@ class Callbacks(core.Callbacks):
 
     def update_buttons(self, *unused_arguments):
         """Trigger previous, next and save button states changes"""
-        for (button_name, state_var) in self.tkvars.buttonstate.items():
-            gui.set_state(self.widgets.buttons[button_name], state_var.get())
-        #
+        ...
+# =============================================================================
+#         for (button_name, state_var) in self.tkvars.buttonstate.items():
+#             gui.set_state(self.widgets.buttons[button_name], state_var.get())
+#         #
+# =============================================================================
 
 
 class Panels(core.Panels):
@@ -752,6 +757,7 @@ class VideoUI(core.UserInterface):
                 "change_frame_from_text"
             ),
             end_frame=tkinter.IntVar(),
+            exit_after_save=tkinter.IntVar(),
             export=core.Namespace(
                 crf=tkinter.IntVar(),
                 include_audio=tkinter.IntVar(),
@@ -769,6 +775,7 @@ class VideoUI(core.UserInterface):
                 ),
             ),
         )
+        self.tkvars.exit_after_save.set(1)
         self.tkvars.export.crf.set(DEFAULT_EXPORT_CRF)
         self.tkvars.export.preset.set(DEFAULT_EXPORT_PRESET)
 
@@ -1197,62 +1204,82 @@ class VideoUI(core.UserInterface):
         self.vars.unsaved_changes = False
         return True
 
+    jump_to_new_route = apply_and_recycle
+
     def show_additional_buttons(self, buttons_area):
         """Additional buttons for the pixelate_image script"""
-
-        def jump_to_preview():
-            """Inner function for jumping directly
-            to the preview panel
-            """
-            self.jump_to_panel(PREVIEW)
-
+        buttonstates = dict(
+            cut_end=tkinter.DISABLED,
+            add_route=tkinter.DISABLED,
+            add_segment=tkinter.DISABLED,
+            save=tkinter.NORMAL,
+        )
+        commands = dict(
+            cut_end=self.next_panel,
+            add_route=self.jump_to_new_route,
+            add_segment=self.next_panel,
+            save=self.save_file,
+        )
+        if self.vars.current_panel == FIRST_FRAME:
+            buttonstates.update(
+                cut_end=tkinter.NORMAL,
+                add_route=tkinter.NORMAL,
+            )
+        elif self.vars.current_panel == LAST_FRAME:
+            buttonstates.update(
+                add_route=tkinter.NORMAL,
+            )
+            commands.update(add_route=self.next_panel)
+        elif self.vars.current_panel == START_AREA:
+            buttonstates.update(
+                add_segment=tkinter.NORMAL,
+                save=tkinter.DISABLED,
+            )
+        elif self.vars.current_panel == STOP_AREA:
+            buttonstates.update(
+                add_route=tkinter.NORMAL,
+                add_segment=tkinter.NORMAL,
+            )
         #
-        self.widgets.buttons.update(
-            previous=tkinter.Button(
-                buttons_area,
-                text="\u25c1 Previous",
-                command=self.previous_panel,
-            ),
-            next_=tkinter.Button(
-                buttons_area, text="\u25b7 Next", command=self.next_panel
-            ),
-            apply=tkinter.Button(
-                buttons_area,
-                text="\u2713 Apply",
-                command=jump_to_preview,
-            ),
+        button_texts = dict(
+            cut_end="Cut end",
+            add_route="Add new route",
+            add_segment="Add connected segment",
+            save="Save",
         )
-        self.widgets.buttons.previous.grid(
-            row=0, column=0, **core.BUTTONS_GRID
+        buttons = core.Namespace(
+            (
+                button_id,
+                tkinter.Button(
+                    buttons_area,
+                    text=text,
+                    state=buttonstates[button_id],
+                    command=commands[button_id],
+                )
+            ) for (button_id, text) in button_texts.items()
         )
-        self.widgets.buttons.next_.grid(row=0, column=1, **core.BUTTONS_GRID)
-        self.widgets.buttons.apply.grid(row=0, column=2, **core.BUTTONS_GRID)
-        # Set button states and defer state manipulations
-        self.vars.trace = False
+        and_exit = tkinter.Checkbutton(
+            buttons_area,
+            text='and exit',
+            state=buttonstates['save'],
+            variable=self.tkvars.exit_after_save,
+        )
+        buttons.cut_end.grid(row=0, column=0, **BUTTONS_GRID)
+        buttons.add_route.grid(row=0, column=1, columnspan=2, **BUTTONS_GRID)
+        buttons.add_segment.grid(row=1, column=0, columnspan=3, **BUTTONS_GRID)
+        buttons.save.grid(row=2, column=0, **BUTTONS_GRID)
+        and_exit.grid(row=2, column=1, columnspan=2, **BUTTONS_GRID)
         if self.vars.current_panel == PREVIEW:
-            self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
-            self.tkvars.buttonstate.next_.set(tkinter.DISABLED)
-            # right mouse click as shortcut for "Next"
+            # Disable right mouse click as shortcut for "Next"
             self.main_window.unbind_all("<ButtonRelease-3>")
         else:
-            if self.vars.current_panel == STOP_AREA:
-                self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
-            else:
-                self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
-            #
-            self.tkvars.buttonstate.next_.set(tkinter.NORMAL)
-            # right mouse click as shortcut for "Next"
+            # Enable right mouse click as shortcut for "Next"
             self.main_window.bind_all("<ButtonRelease-3>", self.next_panel)
-        #
-        if self.vars.current_panel in (FIRST_FRAME, LAST_FRAME, START_AREA):
-            self.tkvars.buttonstate.previous.set(tkinter.DISABLED)
-        else:
-            self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
         #
         self.main_window.bind_all("<Left>", self.callbacks.frame_decrement)
         self.main_window.bind_all("<Right>", self.callbacks.frame_increment)
         self.vars.update(trace=True)
-        return 1
+        return 3
 
     def __show_in_default_player(self, full_file_name):
         """If showing the video in the default player is possible,
