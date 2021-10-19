@@ -1,0 +1,20 @@
+digraph "video data workflow brainstorming" {
+
+    subgraph process_video {
+        rank=same;
+        color=black;
+        label="Process video";
+        "Cut at start" -> "Cut at end" -> "Add pixelation (start)" -> "Add stop" -> "Pixelate route";
+        "Add stop" -> "Add stop";
+        "Pixelate route" -> "Add pixelation (start)";
+    }
+    
+    "Load video" -> "Cut at start";
+    "Load video" -> "Cut at end";
+    "Load video" -> "Add pixelation (start)";
+    "Cut at start" -> "Save";
+    "Cut at end" -> "Save";
+    "Pixelate route" -> "Save"
+
+}
+
