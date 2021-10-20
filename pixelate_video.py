@@ -95,7 +95,7 @@ PANEL_NAMES = {
     FIRST_FRAME: "Cut your video: select the wanted video begin,"
     " then right-click (or 'Cut end')",
     LAST_FRAME: "Cut your video: select the wanted video end,"
-    " then right-click (or 'Add route')",
+    " then right-click (or 'Add new route')",
     START_AREA: "Pixelate a segment: select a start frame and area,"
     " then right-click (or 'Add segment end')",
     STOP_AREA: "Pixelate a segment: select an end frame and area,"
