@@ -110,7 +110,8 @@ MOUSE_DRAG_ACTIONS = {
 }
 
 # Grid parameters
-BUTTONS_GRID = dict(padx=5, pady=5, sticky=tkinter.E)
+BUTTONS_GRID_W = dict(padx=3, pady=3, sticky=tkinter.W)
+BUTTONS_GRID_E = dict(padx=3, pady=3, sticky=tkinter.E)
 GRID_FULLWIDTH = dict(padx=4, pady=2, sticky=tkinter.E + tkinter.W)
 WITH_BORDER = dict(borderwidth=2, padx=5, pady=5, relief=tkinter.GROOVE)
 
@@ -1050,8 +1051,8 @@ class UserInterface:
             method = self.vars.post_panel_methods.pop(self.vars.current_panel)
         except KeyError:
             logging.debug(
-                "Post-panel action for %r not defined or already fired!",
-                self.vars.current_panel
+                "Post-panel action for %r not defined or already executed.",
+                self.vars.current_panel,
             )
         else:
             method()
@@ -1457,7 +1458,8 @@ class UserInterface:
         logging.debug("Showing panel %r", self.vars.current_panel)
         try:
             self.vars.post_panel_methods[self.vars.current_phase] = getattr(
-                self.post_panel_actions, self.vars.current_phase)
+                self.post_panel_actions, self.vars.current_phase
+            )
         except AttributeError:
             logging.debug(
                 "No post-panel method defined for %r",
@@ -1481,7 +1483,7 @@ class UserInterface:
         last_row = self.show_additional_buttons(buttons_area)
         self.callbacks.update_buttons()
         help_button = tkinter.Button(
-            buttons_area, text="\u2753 Help", command=self.show_help
+            buttons_area, text="Help", command=self.show_help
         )
         about_button = tkinter.Button(
             buttons_area, text="\u24d8 About", command=self.__show_about
@@ -1489,9 +1491,9 @@ class UserInterface:
         quit_button = tkinter.Button(
             buttons_area, text="\u2717 Quit", command=self.quit
         )
-        help_button.grid(row=last_row, column=0, **BUTTONS_GRID)
-        about_button.grid(row=last_row, column=1, **BUTTONS_GRID)
-        quit_button.grid(row=last_row, column=2, **BUTTONS_GRID)
+        help_button.grid(row=last_row, column=0, **BUTTONS_GRID_E)
+        about_button.grid(row=last_row, column=1, **BUTTONS_GRID_W)
+        quit_button.grid(row=last_row, column=2, **BUTTONS_GRID_E)
         self.widgets.action_area.rowconfigure(2, weight=100)
         buttons_area.grid(row=3, column=1, sticky=tkinter.E)
         self.main_window.bind_all(
