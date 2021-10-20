@@ -935,6 +935,7 @@ class UserInterface:
     action_class = InterfacePlugin
     callback_class = Callbacks
     panel_class = Panels
+    post_panel_action_class = InterfacePlugin
     rollback_class = InterfacePlugin
 
     script_name = "<module pyxelate.app>"
@@ -959,6 +960,7 @@ class UserInterface:
         self.vars = Namespace(
             current_panel=None,
             errors=[],
+            post_panel_methods={},
             canvas_width=canvas_width,
             canvas_height=canvas_height,
             tk_image=None,
@@ -984,6 +986,7 @@ class UserInterface:
         self.actions = self.action_class(self)
         self.callbacks = self.callback_class(self)
         self.panels = self.panel_class(self)
+        self.post_panel_actions = self.post_panel_action_class(self)
         self.rollbacks = self.rollback_class(self)
         # Fill self.tkvars after the callbaks plugin has been initialized
         self.tkvars.update(
@@ -1040,6 +1043,19 @@ class UserInterface:
         (additional widgets)
         """
         raise NotImplementedError
+
+    def execute_post_panel_action(self):
+        """Execute the post panel action for the current panel"""
+        try:
+            method = self.vars.post_panel_methods.pop(self.vars.current_panel)
+        except KeyError:
+            logging.debug(
+                "Post-panel action for %r not defined or already fired!",
+                self.vars.current_panel
+            )
+        else:
+            method()
+        #
 
     def open_file(
         self, keep_existing=False, preset_path=None, quit_on_empty_choice=False
@@ -1292,7 +1308,12 @@ class UserInterface:
         self.__show_panel()
 
     def next_panel(self, *unused_arguments):
-        """Go to the next panel, executing its action method before"""
+        """Go to the next panel,
+        executing the old panel’s post-panel action mrthod,
+        and then the new panel’s (pre-panel) action method
+        before showing the new panel
+        """
+        self.execute_post_panel_action()
         if self.vars.current_panel in self.looped_panels:
             panel_name = self.vars.current_panel
             self.vars.loop_counter[panel_name].append(False)
@@ -1434,6 +1455,15 @@ class UserInterface:
         #
         self.__show_errors()
         logging.debug("Showing panel %r", self.vars.current_panel)
+        try:
+            self.vars.post_panel_methods[self.vars.current_phase] = getattr(
+                self.post_panel_actions, self.vars.current_phase)
+        except AttributeError:
+            logging.debug(
+                "No post-panel method defined for %r",
+                self.vars.current_panel,
+            )
+        #
         gui.Heading(
             self.widgets.action_area,
             text=self.panel_names[self.vars.current_panel],

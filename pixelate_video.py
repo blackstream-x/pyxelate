@@ -158,10 +158,6 @@ class Actions(core.InterfacePlugin):
 
     def last_frame(self):
         """Actions before showing "first frame" selection"""
-        self.vars.kept_frames.update(start=self.tkvars.current_frame.get())
-        self.application.cut_video(
-            to_=self.vars.kept_frames.start - 1,
-        )
         self.application.adjust_current_frame(self.vars.kept_frames.end)
         self.application.adjust_frame_limits()
         self.vars.update(
@@ -177,12 +173,6 @@ class Actions(core.InterfacePlugin):
         """Actions before showing the start area selection panel:
         Load the frame and set the variables
         """
-        if self.vars.current_panel == LAST_FRAME:
-            self.vars.kept_frames.update(end=self.tkvars.current_frame.get())
-            self.application.cut_video(
-                from_=self.vars.kept_frames.end + 1,
-            )
-        #
         self.application.adjust_frame_limits()
         self.vars.update(
             image=pixelations.FramePixelation(
@@ -656,6 +646,25 @@ class Panels(core.Panels):
         self.sidebar_export()
 
 
+class PostPanelActions(core.InterfacePlugin):
+
+    """Pre-panel actions for the video GUI in sequential order"""
+
+    def first_frame(self):
+        """Cut before the first frame if required"""
+        self.vars.kept_frames.update(start=self.tkvars.current_frame.get())
+        self.application.cut_video(
+            to_=self.vars.kept_frames.start - 1,
+        )
+
+    def last_frame(self):
+        """Cut after the last frame if required"""
+        self.vars.kept_frames.update(end=self.tkvars.current_frame.get())
+        self.application.cut_video(
+            from_=self.vars.kept_frames.end + 1,
+        )
+
+
 class Rollbacks(core.InterfacePlugin):
 
     """Rollback acction in order of appearance"""
@@ -716,6 +725,7 @@ class VideoUI(core.UserInterface):
     action_class = Actions
     callback_class = Callbacks
     panel_class = Panels
+    post_panel_action_class = PostPanelActions
     rollback_class = Rollbacks
 
     def __init__(self, file_path, options):
@@ -1220,6 +1230,12 @@ class VideoUI(core.UserInterface):
             add_segment=self.next_panel,
             save=self.save_file,
         )
+        button_texts = dict(
+            cut_end="Cut end",
+            add_route="Add new route",
+            add_segment="Add connected segment",
+            save="Save",
+        )
         if self.vars.current_panel == FIRST_FRAME:
             buttonstates.update(
                 cut_end=tkinter.NORMAL,
@@ -1235,18 +1251,13 @@ class VideoUI(core.UserInterface):
                 add_segment=tkinter.NORMAL,
                 save=tkinter.DISABLED,
             )
+            button_texts.update(add_segment="Add segment end")
         elif self.vars.current_panel == STOP_AREA:
             buttonstates.update(
                 add_route=tkinter.NORMAL,
                 add_segment=tkinter.NORMAL,
             )
         #
-        button_texts = dict(
-            cut_end="Cut end",
-            add_route="Add new route",
-            add_segment="Add connected segment",
-            save="Save",
-        )
         buttons = core.Namespace(
             (
                 button_id,
