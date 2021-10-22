@@ -1240,7 +1240,7 @@ class VideoUI(core.UserInterface):
         )
         button_texts = dict(
             cut_end="Cut end",
-            add_route="Add new route",
+            add_route="Preview or add new route",
             add_segment="Add connected segment",
             save="Save",
             save_and_exit="Save and exit",
