@@ -92,11 +92,14 @@ PHASES = (
 )
 
 PANEL_NAMES = {
-    FIRST_FRAME: "Cut your video: select the beginning of the desired clip, then right-click (or 'Next')",
-    LAST_FRAME: "Cut your video: select the end of the desired clip, then right-click (or 'Next')",
-    START_AREA: "Pixelate a segment: select a start frame and area, then right-click (or 'Next')",
-    STOP_AREA: "Pixelate a segment: select an end frame and area, then right-click (or 'Next'), then 'Apply'",
-    PREVIEW: "Preview/Export",
+    FIRST_FRAME: "Cut your video: select the beginning of the desired clip,"
+    " then right-click (or 'Next')",
+    LAST_FRAME: "Cut your video: select the end of the desired clip,"
+    " then right-click (or 'Next')",
+    START_AREA: "Pixelate a segment: select a start frame and area,"
+    " then right-click (or 'Add segment end')",
+    STOP_AREA: "Pixelate a segment: select an end frame and area,"
+    " then right-click for a connected segment",
 }
 
 EMPTY_SELECTION = dict(
@@ -138,6 +141,81 @@ DEFAULT_TILESIZE = 10
 #
 
 
+class TemporaryFramesPath(core.InterfacePlugin):
+
+    """Context manager for a temporary directory with files from
+    the modified_frames and original_frames directory
+    """
+
+    def __init__(self, application):
+        """Store the provided information and provide
+        a storage for files source
+        """
+        super().__init__(application)
+        self.source_file = {}
+        self.temporary_storage = None
+
+    def __enter__(self):
+        """Create the temporary directory.
+        Move files here (from the primary or, if not found,
+        from the secondary directory
+        store the original name for each file
+        Return the name of the current tempdir as a Path instance
+        """
+        source_paths = []
+        for source_tempdir in (
+            self.vars.modified_frames,
+            self.vars.original_frames,
+        ):
+            try:
+                source_paths.append(pathlib.Path(source_tempdir.name))
+            except AttributeError:
+                pass
+            #
+        #
+        self.temporary_storage = tempfile.TemporaryDirectory()
+        logging.info("Created tempdir %r", self.temporary_storage.name)
+        temporary_path = pathlib.Path(self.temporary_storage.name)
+        new_number = 1
+        for old_number in range(
+            self.vars.kept_frames.start, self.vars.kept_frames.end + 1
+        ):
+            old_file_name = pixelations.FRAME_PATTERN % old_number
+            new_file_name = pixelations.FRAME_PATTERN % new_number
+            for single_source_path in source_paths:
+                old_path = single_source_path / old_file_name
+                if old_path.is_file():
+                    self.source_file[new_file_name] = str(old_path)
+                    old_path.rename(temporary_path / new_file_name)
+                    break
+                #
+            else:
+                raise ValueError(
+                    "File %r found neither in modified nor in original frames!"
+                    % old_file_name
+                )
+            #
+            new_number += 1
+        #
+        logging.debug("Moved %r files", new_number - 1)
+        return temporary_path
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Move the files back
+        Cleanup the temporary directory
+        """
+        temporary_path = pathlib.Path(self.temporary_storage.name)
+        for file_path in temporary_path.glob("*"):
+            original_name = self.source_file[file_path.name]
+            file_path.rename(original_name)
+        #
+        logging.debug("Moved files back to %s", original_name)
+        self.temporary_storage.cleanup()
+        logging.info(
+            "Deleted temporary directory %s", self.temporary_storage.name
+        )
+
+
 class Actions(core.InterfacePlugin):
 
     """Pre-panel actions for the video GUI in sequential order"""
@@ -156,10 +234,6 @@ class Actions(core.InterfacePlugin):
 
     def last_frame(self):
         """Actions before showing "first frame" selection"""
-        self.vars.kept_frames.update(start=self.tkvars.current_frame.get())
-        self.application.cut_video(
-            to_=self.vars.kept_frames.start - 1,
-        )
         self.application.adjust_current_frame(self.vars.kept_frames.end)
         self.application.adjust_frame_limits()
         self.vars.update(
@@ -175,12 +249,6 @@ class Actions(core.InterfacePlugin):
         """Actions before showing the start area selection panel:
         Load the frame and set the variables
         """
-        if self.vars.current_panel == LAST_FRAME:
-            self.vars.kept_frames.update(end=self.tkvars.current_frame.get())
-            self.application.cut_video(
-                from_=self.vars.kept_frames.end + 1,
-            )
-        #
         self.application.adjust_frame_limits()
         self.vars.update(
             image=pixelations.FramePixelation(
@@ -209,7 +277,6 @@ class Actions(core.InterfacePlugin):
         Fix the currently selected frame as start frame.
         Load the frame for area selection
         """
-        self.application.save_coordinates()
         self.application.adjust_frame_limits(
             minimum=self.tkvars.current_frame.get()
         )
@@ -235,7 +302,6 @@ class Actions(core.InterfacePlugin):
         Fix the selected end coordinates
         Apply the pixelations to all images
         """
-        self.application.save_coordinates()
         self.application.adjust_frame_limits()
         try:
             self.application.apply_coordinates(self.vars.later_stations.pop())
@@ -243,36 +309,6 @@ class Actions(core.InterfacePlugin):
             pass
         #
         self.vars.update(
-            modified_frames=tempfile.TemporaryDirectory(),
-        )
-        # Set pixelations shape
-        px_shape = core.SHAPES[self.vars.stations[0]["shape"]]
-        for station_data in self.vars.stations:
-            if core.SHAPES[station_data["shape"]] != px_shape:
-                raise ValueError("Shapes at all stations must be the same!")
-            #
-        #
-        logging.info("Created tempdir %r", self.vars.modified_frames.name)
-        pixelator = pixelations.MultiFramePixelation(
-            pathlib.Path(self.vars.original_frames.name),
-            pathlib.Path(self.vars.modified_frames.name),
-            quality="maximum",
-        )
-        progress = gui.TransientProgressDisplay(
-            self.main_window,
-            title="Applying pixelation",
-            label="Applying pixelation to selected frames …",
-            maximum=100,
-        )
-        for percentage in pixelator.pixelate_frames(
-            px_shape,
-            self.vars.stations,
-        ):
-            progress.set_current_value(percentage)
-        #
-        progress.action_cancel()
-        self.vars.update(
-            unsaved_changes=True,
             previous_drag_action=self.tkvars.drag_action.get(),
             frame_position="Current",
         )
@@ -369,9 +405,7 @@ class Callbacks(core.Callbacks):
 
     def update_buttons(self, *unused_arguments):
         """Trigger previous, next and save button states changes"""
-        for (button_name, state_var) in self.tkvars.buttonstate.items():
-            gui.set_state(self.widgets.buttons[button_name], state_var.get())
-        #
+        ...
 
 
 class Panels(core.Panels):
@@ -458,24 +492,11 @@ class Panels(core.Panels):
         self.component_image_on_canvas()
         self.sidebar_frameselection()
 
-    def component_add_another(self, sidebar_frame):
-        """Section with the 'Add another pixelation segment' button"""
-        self.application.heading_with_help_button(
-            sidebar_frame, "More pixelations"
-        )
-        more_button = tkinter.Button(
-            sidebar_frame,
-            text="Add another pixelation segment",
-            command=self.application.apply_and_recycle,
-        )
-        more_button.grid(sticky=tkinter.W, columnspan=4)
-
     def component_export_settings(self, sidebar_frame):
         """Section with the export settings"""
         # Disabe "include audio" if the original video
         # has no audio stream
         if self.vars.has_audio:
-            self.tkvars.export.include_audio.set(1)
             include_audio_state = tkinter.NORMAL
         else:
             self.tkvars.export.include_audio.set(0)
@@ -521,16 +542,6 @@ class Panels(core.Panels):
             state=include_audio_state,
         )
         include_audio.grid(
-            sticky=tkinter.W,
-            column=0,
-            columnspan=5,
-        )
-        save_button = tkinter.Button(
-            sidebar_frame,
-            text="Save",
-            command=self.application.save_file,
-        )
-        save_button.grid(
             sticky=tkinter.W,
             column=0,
             columnspan=5,
@@ -601,7 +612,6 @@ class Panels(core.Panels):
         self.component_select_drag_action(
             sidebar_frame, supported_actions=[core.NEW_CROP_AREA]
         )
-        self.component_add_another(sidebar_frame)
         sidebar_frame.columnconfigure(4, weight=100)
         sidebar_frame.grid(row=0, column=1, rowspan=2, **core.GRID_FULLWIDTH)
 
@@ -636,7 +646,7 @@ class Panels(core.Panels):
         """Show the image on a canvas and let
         the user select the area to be pixelated
         """
-        if self.vars.start_at.shape in core.ELLIPTIC_SHAPES:
+        if self.vars.stations[-1]["shape"] in core.ELLIPTIC_SHAPES:
             allowed_shapes = core.ELLIPTIC_SHAPES
         else:
             allowed_shapes = core.RECTANGULAR_SHAPES
@@ -651,9 +661,75 @@ class Panels(core.Panels):
         self.sidebar_export()
 
 
+class PostPanelActions(core.InterfacePlugin):
+
+    """Pre-panel actions for the video GUI in sequential order"""
+
+    def first_frame(self):
+        """Cut before the first frame if required"""
+        self.vars.kept_frames.update(start=self.tkvars.current_frame.get())
+        self.application.cut_video(
+            to_=self.vars.kept_frames.start - 1,
+        )
+
+    def last_frame(self):
+        """Cut after the last frame if required"""
+        self.vars.kept_frames.update(end=self.tkvars.current_frame.get())
+        self.application.cut_video(
+            from_=self.vars.kept_frames.end + 1,
+        )
+
+    def start_area(self):
+        """Append coordinates (current frame and selection)
+        to the stations list
+        """
+        logging.debug("Saving coordinates ...")
+        self.vars.stations.append(self.application.get_coordinates())
+        self.vars.update(
+            modified_frames=tempfile.TemporaryDirectory(),
+        )
+        logging.info("Created tempdir %r", self.vars.modified_frames.name)
+
+    def stop_area(self):
+        """Append coordinates (current frame and selection)
+        to the stations list
+        """
+        logging.debug("Saving coordinates ...")
+        self.vars.stations.append(self.application.get_coordinates())
+        # Set pixelations shape
+        logging.debug("Pixelating the segment...")
+        [segment_start, segment_end] = self.vars.stations[-2:]
+        px_shape = core.SHAPES[segment_start["shape"]]
+        if core.SHAPES[segment_end["shape"]] != px_shape:
+            raise ValueError(
+                "Shapes at both ends of the segment must be the same!"
+            )
+        #
+        pixelator = pixelations.MultiFramePixelation(
+            pathlib.Path(self.vars.original_frames.name),
+            pathlib.Path(self.vars.modified_frames.name),
+            quality="maximum",
+        )
+        progress = gui.TransientProgressDisplay(
+            self.main_window,
+            title="Pixelating segment",
+            label="Applying pixelation to all frames in the segment…",
+            maximum=100,
+        )
+        for percentage in pixelator.pixelate_segment(
+            px_shape,
+            segment_start,
+            segment_end,
+        ):
+            progress.set_current_value(percentage)
+        #
+        progress.action_cancel()
+        self.vars.update(unsaved_changes=True)
+
+
 class Rollbacks(core.InterfacePlugin):
 
-    """Rollback acction in order of appearance"""
+    """Rollback action in order of appearance"""
 
     def stop_area(self):
         """Actions when clicking the "previous" button
@@ -711,6 +787,7 @@ class VideoUI(core.UserInterface):
     action_class = Actions
     callback_class = Callbacks
     panel_class = Panels
+    post_panel_action_class = PostPanelActions
     rollback_class = Rollbacks
 
     def __init__(self, file_path, options):
@@ -743,8 +820,6 @@ class VideoUI(core.UserInterface):
             unsaved_changes=False,
             frame_limits=core.Namespace(minimum=1, maximum=1),
             kept_frames=core.Namespace(start=1, end=1),
-            start_at=core.Namespace(**EMPTY_SELECTION),
-            end_at=core.Namespace(**EMPTY_SELECTION),
         )
         self.tkvars.update(
             current_frame=self.callbacks.get_traced_intvar("change_frame"),
@@ -752,6 +827,7 @@ class VideoUI(core.UserInterface):
                 "change_frame_from_text"
             ),
             end_frame=tkinter.IntVar(),
+            exit_after_save=tkinter.IntVar(),
             export=core.Namespace(
                 crf=tkinter.IntVar(),
                 include_audio=tkinter.IntVar(),
@@ -769,6 +845,7 @@ class VideoUI(core.UserInterface):
                 ),
             ),
         )
+        self.tkvars.exit_after_save.set(1)
         self.tkvars.export.crf.set(DEFAULT_EXPORT_CRF)
         self.tkvars.export.preset.set(DEFAULT_EXPORT_PRESET)
 
@@ -836,25 +913,6 @@ class VideoUI(core.UserInterface):
         self.vars.frame_limits.maximum = maximum or self.vars.kept_frames.end
         self.adjust_current_frame()
 
-    def apply_and_recycle(self):
-        """Apply changes to the frames,
-        and re-cycle them as original frames
-        """
-        logging.debug("Applying changes and reusing the frames")
-        # Fill up "modified" directory with missing frames
-        self.complete_modified_directory()
-        # Declare the "modified" directory als original
-        # and discard the precǘious "original" directory
-        self.vars.original_frames.cleanup()
-        self.vars.update(original_frames=self.vars.modified_frames)
-        self.vars.update(modified_frames=None)
-        # Push current coordinates to self.vars.later_stations for re-use
-        self.vars.stations.clear()
-        self.vars.later_stations.clear()
-        self.vars.later_stations.append(self.get_coordinates())
-        # Directly jump to start_area
-        self.jump_to_panel(START_AREA)
-
     def apply_coordinates(self, coordinates):
         """Apply the provided coordinates:
         Set frame and area
@@ -886,35 +944,16 @@ class VideoUI(core.UserInterface):
         #
         return True
 
-    def complete_modified_directory(self):
-        """Fill up modified directory from souce directory"""
-        original_path = pathlib.Path(self.vars.original_frames.name)
-        target_path = pathlib.Path(self.vars.modified_frames.name)
-        for frame_number in range(
-            self.vars.kept_frames.start, self.vars.kept_frames.end + 1
-        ):
-            frame_file = pixelations.FRAME_PATTERN % frame_number
-            frame_target_path = target_path / frame_file
-            if not frame_target_path.exists():
-                frame_source_path = original_path / frame_file
-                frame_source_path.rename(frame_target_path)
-            #
-        #
-
     def cut_video(self, from_=None, to_=None):
         """Remove frame files from_ to to_"""
         if from_ is None:
-            value = 1
-            logging.debug("Setting from_ frame# to %r!", value)
-            from_ = value
+            from_ = 1
         #
         if to_ is None:
-            value = self.vars.nb_frames
-            logging.debug("Setting to_ frame# to %r!", value)
-            to_ = value
+            to_ = self.vars.nb_frames
         #
         if to_ < from_:
-            logging.error("Cut range (%r-%r) is inconsistent", from_, to_)
+            logging.debug("No cutting required!")
             return
         #
         original_path = pathlib.Path(self.vars.original_frames.name)
@@ -926,10 +965,11 @@ class VideoUI(core.UserInterface):
         )
         for frame_number in range(from_, range_upper):
             frame_file = pixelations.FRAME_PATTERN % frame_number
-            logging.debug("Removing %s", frame_file)
             frame_path = original_path / frame_file
             frame_path.unlink()
         #
+        logging.debug("... done!")
+        self.vars.update(unsaved_changes=True)
 
     def __examine_video(self, file_path):
         """Examine the video and set the video properties variables"""
@@ -949,6 +989,7 @@ class VideoUI(core.UserInterface):
             )
         )
         logging.info("%r has audio: %r", file_path.name, has_audio)
+        self.tkvars.export.include_audio.set(int(has_audio))
         self.vars.update(has_audio=has_audio)
         label = tkinter.Label(progress.body, text="Examining video stream …")
         label.grid()
@@ -1037,16 +1078,8 @@ class VideoUI(core.UserInterface):
         self,
     ):
         """Checks and actions before exiting the application"""
-        if self.vars.current_panel == STOP_AREA:
-            if messagebox.askyesno(
-                "Unapplied pixelation",
-                "The current pixelation route will be lost if you quit now.\n"
-                "Show the %r panel instead?" % self.panel_names[PREVIEW],
-            ):
-                self.jump_to_panel(PREVIEW)
-                return False
-            #
-        elif self.vars.unsaved_changes:
+        self.execute_post_panel_action()
+        if self.vars.unsaved_changes:
             if messagebox.askyesno("Unsaved Changes", "Save your changes?"):
                 if not self.save_file():
                     if not messagebox.askokcancel(
@@ -1069,19 +1102,16 @@ class VideoUI(core.UserInterface):
         #
         return True
 
-    def save_coordinates(self):
-        """Append coordinates (current frame and selection)
-        to the stations list
-        """
-        logging.debug("Saving coordinates ...")
-        self.vars.stations.append(self.get_coordinates())
+    def save_and_exit(self):
+        """Save and exit"""
+        self.save_file()
+        self.quit()
 
     def save_file(self):
         """Save as the selected file,
         return True if the file was saved
         """
-        # fill up "modified" directory with missing frames
-        self.complete_modified_directory()
+        self.execute_post_panel_action()
         original_suffix = self.vars.original_path.suffix
         selected_file = filedialog.asksaveasfilename(
             initialdir=str(self.vars.original_path.parent),
@@ -1103,88 +1133,83 @@ class VideoUI(core.UserInterface):
             maximum=self.vars.nb_frames,
         )
         # Build the video from the frames
-        arguments = [
-            "-framerate",
-            str(self.vars.frame_rate),
-        ]
-        cut_at_start = self.vars.kept_frames.start - 1
-        if cut_at_start:
-            arguments.extend(
-                ["-start_number", str(self.vars.kept_frames.start)]
-            )
-        #
-        arguments.extend(
-            [
+        with TemporaryFramesPath(self) as temp_frames_path:
+            cut_at_start = self.vars.kept_frames.start - 1
+            arguments = [
+                "-framerate",
+                str(self.vars.frame_rate),
                 "-i",
-                os.path.join(
-                    self.vars.modified_frames.name, pixelations.FRAME_PATTERN
-                ),
+                str(temp_frames_path / pixelations.FRAME_PATTERN),
             ]
-        )
-        if self.tkvars.export.include_audio.get():
-            if cut_at_start:
+            if self.tkvars.export.include_audio.get():
+                if cut_at_start:
+                    arguments.extend(
+                        [
+                            "-ss",
+                            "%.3f"
+                            % float(cut_at_start / self.vars.frame_rate),
+                        ]
+                    )
+                #
                 arguments.extend(
                     [
-                        "-ss",
-                        "%.3f" % float(cut_at_start / self.vars.frame_rate),
+                        "-i",
+                        str(self.vars.original_path),
+                        "-map",
+                        "0:v",
+                        "-map",
+                        "1:a",
+                        "-c:a",
+                        "copy",
                     ]
                 )
+                if (
+                    cut_at_start
+                    or self.vars.kept_frames.end < self.vars.nb_frames
+                ):
+                    arguments.append("-shortest")
+                #
+            #
+            if self.tkvars.crop.get():
+                width = self.vars.crop_area.right - self.vars.crop_area.left
+                height = self.vars.crop_area.bottom - self.vars.crop_area.top
+                crop_filter = "crop=w=%s:h=%s:x=%s:y=%s," % (
+                    width,
+                    height,
+                    self.vars.crop_area.left,
+                    self.vars.crop_area.top,
+                )
+            else:
+                crop_filter = ""
             #
             arguments.extend(
                 [
-                    "-i",
-                    str(self.vars.original_path),
-                    "-map",
-                    "0:v",
-                    "-map",
-                    "1:a",
-                    "-c:a",
-                    "copy",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    self.tkvars.export.preset.get(),
+                    "-crf",
+                    str(self.tkvars.export.crf.get()),
+                    "-vf",
+                    f"fps={self.vars.frame_rate},{crop_filter}format=yuv420p",
+                    "-y",
+                    str(file_path),
                 ]
             )
-            if cut_at_start or self.vars.kept_frames.end < self.vars.nb_frames:
-                arguments.append("-shortest")
-            #
-        #
-        if self.tkvars.crop.get():
-            width = self.vars.crop_area.right - self.vars.crop_area.left
-            height = self.vars.crop_area.bottom - self.vars.crop_area.top
-            crop_filter = "crop=w=%s:h=%s:x=%s:y=%s," % (
-                width,
-                height,
-                self.vars.crop_area.left,
-                self.vars.crop_area.top,
+            save_exec = ffmw.FFmpegWrapper(
+                *arguments, executable=self.options.ffmpeg_executable
             )
-        else:
-            crop_filter = ""
-        #
-        arguments.extend(
-            [
-                "-c:v",
-                "libx264",
-                "-preset",
-                self.tkvars.export.preset.get(),
-                "-crf",
-                str(self.tkvars.export.crf.get()),
-                "-vf",
-                f"fps={self.vars.frame_rate},{crop_filter}format=yuv420p",
-                "-y",
-                str(file_path),
-            ]
-        )
-        save_exec = ffmw.FFmpegWrapper(
-            *arguments, executable=self.options.ffmpeg_executable
-        )
-        save_exec.add_extra_arguments("-loglevel", "error")
-        try:
-            for line in save_exec.stream(check=True):
-                if line.startswith("frame="):
-                    value = line.split("=", 1)[1]
-                    progress.set_current_value(int(value))
+            save_exec.add_extra_arguments("-loglevel", "error")
+            try:
+                for line in save_exec.stream(check=True):
+                    if line.startswith("frame="):
+                        value = line.split("=", 1)[1]
+                        progress.set_current_value(int(value))
+                    #
                 #
+            finally:
+                progress.action_cancel()
             #
-        finally:
-            progress.action_cancel()
         #
         if not self.__show_in_default_player(str(file_path)):
             messagebox.showinfo(
@@ -1199,60 +1224,84 @@ class VideoUI(core.UserInterface):
 
     def show_additional_buttons(self, buttons_area):
         """Additional buttons for the pixelate_image script"""
-
-        def jump_to_preview():
-            """Inner function for jumping directly
-            to the preview panel
-            """
-            self.jump_to_panel(PREVIEW)
-
+        buttonstates = dict(
+            cut_end=tkinter.DISABLED,
+            add_route=tkinter.DISABLED,
+            add_segment=tkinter.DISABLED,
+            save=tkinter.NORMAL,
+            save_and_exit=tkinter.NORMAL,
+        )
+        commands = dict(
+            cut_end=self.next_panel,
+            add_route=self.start_new_route,
+            add_segment=self.next_panel,
+            save=self.save_file,
+            save_and_exit=self.save_and_exit,
+        )
+        button_texts = dict(
+            cut_end="Cut end",
+            add_route="Preview or add new route",
+            add_segment="Add connected segment",
+            save="Save",
+            save_and_exit="Save and exit",
+        )
+        if self.vars.current_panel == FIRST_FRAME:
+            buttonstates.update(
+                cut_end=tkinter.NORMAL,
+                add_route=tkinter.NORMAL,
+            )
+        elif self.vars.current_panel == LAST_FRAME:
+            buttonstates.update(
+                add_route=tkinter.NORMAL,
+            )
+            commands.update(add_route=self.next_panel)
+        elif self.vars.current_panel == START_AREA:
+            buttonstates.update(
+                add_segment=tkinter.NORMAL,
+                save=tkinter.DISABLED,
+                save_and_exit=tkinter.DISABLED,
+            )
+            button_texts.update(add_segment="Add segment end")
+        elif self.vars.current_panel in (STOP_AREA, PREVIEW):
+            buttonstates.update(
+                add_route=tkinter.NORMAL,
+                add_segment=tkinter.NORMAL,
+            )
         #
-        self.widgets.buttons.update(
-            previous=tkinter.Button(
-                buttons_area,
-                text="\u25c1 Previous",
-                command=self.previous_panel,
-            ),
-            next_=tkinter.Button(
-                buttons_area, text="\u25b7 Next", command=self.next_panel
-            ),
-            apply=tkinter.Button(
-                buttons_area,
-                text="\u2713 Apply",
-                command=jump_to_preview,
-            ),
+        buttons = core.Namespace(
+            (
+                button_id,
+                tkinter.Button(
+                    buttons_area,
+                    text=text,
+                    state=buttonstates[button_id],
+                    command=commands[button_id],
+                ),
+            )
+            for (button_id, text) in button_texts.items()
         )
-        self.widgets.buttons.previous.grid(
-            row=0, column=0, **core.BUTTONS_GRID
+        buttons.cut_end.grid(row=0, column=0, **core.BUTTONS_GRID_E)
+        buttons.add_route.grid(
+            row=0, column=1, columnspan=2, **core.BUTTONS_GRID_W
         )
-        self.widgets.buttons.next_.grid(row=0, column=1, **core.BUTTONS_GRID)
-        self.widgets.buttons.apply.grid(row=0, column=2, **core.BUTTONS_GRID)
-        # Set button states and defer state manipulations
-        self.vars.trace = False
+        buttons.add_segment.grid(
+            row=1, column=1, columnspan=2, **core.BUTTONS_GRID_W
+        )
+        buttons.save.grid(row=2, column=0, **core.BUTTONS_GRID_E)
+        buttons.save_and_exit.grid(
+            row=2, column=1, columnspan=2, **core.BUTTONS_GRID_W
+        )
         if self.vars.current_panel == PREVIEW:
-            self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
-            self.tkvars.buttonstate.next_.set(tkinter.DISABLED)
-            # right mouse click as shortcut for "Next"
+            # Disable right mouse click as shortcut for "Next"
             self.main_window.unbind_all("<ButtonRelease-3>")
         else:
-            if self.vars.current_panel == STOP_AREA:
-                self.tkvars.buttonstate.apply.set(tkinter.NORMAL)
-            else:
-                self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
-            #
-            self.tkvars.buttonstate.next_.set(tkinter.NORMAL)
-            # right mouse click as shortcut for "Next"
+            # Enable right mouse click as shortcut for "Next"
             self.main_window.bind_all("<ButtonRelease-3>", self.next_panel)
-        #
-        if self.vars.current_panel in (FIRST_FRAME, LAST_FRAME, START_AREA):
-            self.tkvars.buttonstate.previous.set(tkinter.DISABLED)
-        else:
-            self.tkvars.buttonstate.previous.set(tkinter.NORMAL)
         #
         self.main_window.bind_all("<Left>", self.callbacks.frame_decrement)
         self.main_window.bind_all("<Right>", self.callbacks.frame_increment)
         self.vars.update(trace=True)
-        return 1
+        return 3
 
     def __show_in_default_player(self, full_file_name):
         """If showing the video in the default player is possible,
@@ -1323,9 +1372,6 @@ class VideoUI(core.UserInterface):
         finally:
             progress.action_cancel()
         #
-        # Clear selection
-        self.vars.start_at.update(**EMPTY_SELECTION)
-        self.vars.end_at.update(**EMPTY_SELECTION)
         # set the original path and displayed file name
         self.vars.update(original_path=file_path, unsaved_changes=False)
         self.vars.kept_frames.update(start=1, end=self.vars.nb_frames)
@@ -1333,6 +1379,34 @@ class VideoUI(core.UserInterface):
         self.vars.later_stations.clear()
         self.tkvars.file_name.set(file_path.name)
         self.tkvars.current_frame.set(1)
+
+    def start_new_route(self):
+        """Apply changes to the frames,
+        and re-cycle them as original frames
+        """
+        logging.debug("Executing post-panel action")
+        self.execute_post_panel_action()
+        if self.vars.modified_frames:
+            logging.debug("Setting modified frames as originals")
+            original_frames_path = pathlib.Path(self.vars.original_frames.name)
+            modified_frames_path = pathlib.Path(self.vars.modified_frames.name)
+            for frame_path in modified_frames_path.glob("*"):
+                frame_file_name = frame_path.name
+                logging.debug("Moving %r to originals path", frame_file_name)
+                frame_path.rename(original_frames_path / frame_file_name)
+            #
+            # Implicit cleanup by garbage collection
+            # self.vars.modified_frames.cleanup()
+            self.vars.update(modified_frames=None)
+        #
+        self.vars.stations.clear()
+        self.vars.later_stations.clear()
+        # Push current coordinates to self.vars.later_stations for re-use
+        if self.vars.current_panel in (STOP_AREA, PREVIEW):
+            self.vars.later_stations.append(self.get_coordinates())
+        #
+        # Directly jump to start_area
+        self.jump_to_panel(START_AREA)
 
 
 #
@@ -1343,7 +1417,7 @@ class VideoUI(core.UserInterface):
 def __get_arguments():
     """Parse command line arguments"""
     argument_parser = argparse.ArgumentParser(
-        description="Pixelate an area of an image"
+        description="Pixelate parts of a schort video clip"
     )
     argument_parser.set_defaults(loglevel=logging.INFO)
     argument_parser.add_argument(
@@ -1376,7 +1450,7 @@ def __get_arguments():
         "image_file",
         nargs="?",
         type=pathlib.Path,
-        help="An image file. If none is provided,"
+        help="A video file. If none is provided,"
         " the script will ask for a file.",
     )
     return argument_parser.parse_args()

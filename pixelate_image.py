@@ -439,9 +439,9 @@ class ImageUI(core.UserInterface):
                 command=self.save_file,
             ),
         )
-        self.widgets.buttons.undo.grid(row=0, column=0, **core.BUTTONS_GRID)
-        self.widgets.buttons.apply.grid(row=0, column=1, **core.BUTTONS_GRID)
-        self.widgets.buttons.save.grid(row=0, column=2, **core.BUTTONS_GRID)
+        self.widgets.buttons.undo.grid(row=0, column=0, **core.BUTTONS_GRID_E)
+        self.widgets.buttons.apply.grid(row=0, column=1, **core.BUTTONS_GRID_W)
+        self.widgets.buttons.save.grid(row=0, column=2, **core.BUTTONS_GRID_E)
         return 1
 
 

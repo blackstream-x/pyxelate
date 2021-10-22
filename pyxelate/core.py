@@ -110,7 +110,8 @@ MOUSE_DRAG_ACTIONS = {
 }
 
 # Grid parameters
-BUTTONS_GRID = dict(padx=5, pady=5, sticky=tkinter.E)
+BUTTONS_GRID_W = dict(padx=3, pady=3, sticky=tkinter.W)
+BUTTONS_GRID_E = dict(padx=3, pady=3, sticky=tkinter.E)
 GRID_FULLWIDTH = dict(padx=4, pady=2, sticky=tkinter.E + tkinter.W)
 WITH_BORDER = dict(borderwidth=2, padx=5, pady=5, relief=tkinter.GROOVE)
 
@@ -935,6 +936,7 @@ class UserInterface:
     action_class = InterfacePlugin
     callback_class = Callbacks
     panel_class = Panels
+    post_panel_action_class = InterfacePlugin
     rollback_class = InterfacePlugin
 
     script_name = "<module pyxelate.app>"
@@ -959,6 +961,7 @@ class UserInterface:
         self.vars = Namespace(
             current_panel=None,
             errors=[],
+            post_panel_methods={},
             canvas_width=canvas_width,
             canvas_height=canvas_height,
             tk_image=None,
@@ -984,6 +987,7 @@ class UserInterface:
         self.actions = self.action_class(self)
         self.callbacks = self.callback_class(self)
         self.panels = self.panel_class(self)
+        self.post_panel_actions = self.post_panel_action_class(self)
         self.rollbacks = self.rollback_class(self)
         # Fill self.tkvars after the callbaks plugin has been initialized
         self.tkvars.update(
@@ -1040,6 +1044,19 @@ class UserInterface:
         (additional widgets)
         """
         raise NotImplementedError
+
+    def execute_post_panel_action(self):
+        """Execute the post panel action for the current panel"""
+        try:
+            method = self.vars.post_panel_methods.pop(self.vars.current_panel)
+        except KeyError:
+            logging.debug(
+                "Post-panel action for %r not defined or already executed.",
+                self.vars.current_panel,
+            )
+        else:
+            method()
+        #
 
     def open_file(
         self, keep_existing=False, preset_path=None, quit_on_empty_choice=False
@@ -1292,7 +1309,12 @@ class UserInterface:
         self.__show_panel()
 
     def next_panel(self, *unused_arguments):
-        """Go to the next panel, executing its action method before"""
+        """Go to the next panel,
+        executing the old panel’s post-panel action mrthod,
+        and then the new panel’s (pre-panel) action method
+        before showing the new panel
+        """
+        self.execute_post_panel_action()
         if self.vars.current_panel in self.looped_panels:
             panel_name = self.vars.current_panel
             self.vars.loop_counter[panel_name].append(False)
@@ -1434,6 +1456,16 @@ class UserInterface:
         #
         self.__show_errors()
         logging.debug("Showing panel %r", self.vars.current_panel)
+        try:
+            self.vars.post_panel_methods[self.vars.current_phase] = getattr(
+                self.post_panel_actions, self.vars.current_phase
+            )
+        except AttributeError:
+            logging.debug(
+                "No post-panel method defined for %r",
+                self.vars.current_panel,
+            )
+        #
         gui.Heading(
             self.widgets.action_area,
             text=self.panel_names[self.vars.current_panel],
@@ -1451,7 +1483,7 @@ class UserInterface:
         last_row = self.show_additional_buttons(buttons_area)
         self.callbacks.update_buttons()
         help_button = tkinter.Button(
-            buttons_area, text="\u2753 Help", command=self.show_help
+            buttons_area, text="Help", command=self.show_help
         )
         about_button = tkinter.Button(
             buttons_area, text="\u24d8 About", command=self.__show_about
@@ -1459,9 +1491,9 @@ class UserInterface:
         quit_button = tkinter.Button(
             buttons_area, text="\u2717 Quit", command=self.quit
         )
-        help_button.grid(row=last_row, column=0, **BUTTONS_GRID)
-        about_button.grid(row=last_row, column=1, **BUTTONS_GRID)
-        quit_button.grid(row=last_row, column=2, **BUTTONS_GRID)
+        help_button.grid(row=last_row, column=0, **BUTTONS_GRID_E)
+        about_button.grid(row=last_row, column=1, **BUTTONS_GRID_W)
+        quit_button.grid(row=last_row, column=2, **BUTTONS_GRID_E)
         self.widgets.action_area.rowconfigure(2, weight=100)
         buttons_area.grid(row=3, column=1, sticky=tkinter.E)
         self.main_window.bind_all(
