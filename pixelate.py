@@ -3,7 +3,7 @@
 
 """
 
-autoselect.py
+pixelate.py
 
 Automatically select the correct script for pixelating
 an image or a video clip, based on the provided file's
@@ -30,9 +30,9 @@ from tkinter import messagebox
 #
 
 
-SCRIPT_NAME = "Autoselect pixelation script"
+SCRIPT_NAME = "Automatically select pixelation script"
 HOMEPAGE = "https://github.com/blackstream-x/pyxelate"
-MAIN_WINDOW_TITLE = "pyxelate: autoselect pixelation script"
+MAIN_WINDOW_TITLE = "pyxelate: automatically select pixelation script"
 
 SCRIPT_PATH = pathlib.Path(os.path.realpath(sys.argv[0]))
 # Follow symlinks
