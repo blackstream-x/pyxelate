@@ -92,15 +92,14 @@ PHASES = (
 )
 
 PANEL_NAMES = {
-    FIRST_FRAME: "Cut your video: select the wanted video begin,"
-    " then right-click (or 'Cut end')",
-    LAST_FRAME: "Cut your video: select the wanted video end,"
-    " then right-click (or 'Add new route')",
+    FIRST_FRAME: "Cut your video: select the beginning of the desired clip,"
+    " then right-click (or 'Next')",
+    LAST_FRAME: "Cut your video: select the end of the desired clip,"
+    " then right-click (or 'Next')",
     START_AREA: "Pixelate a segment: select a start frame and area,"
     " then right-click (or 'Add segment end')",
     STOP_AREA: "Pixelate a segment: select an end frame and area,"
     " then right-click for a connected segment",
-    PREVIEW: "Preview/Export",
 }
 
 EMPTY_SELECTION = dict(
