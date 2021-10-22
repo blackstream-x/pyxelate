@@ -4,14 +4,26 @@ Call **pixelate_video.py** either from the command line or via
 context menu from your file manager
 (see [file manager integration](./file-manager-integration.md)).
 
-The GUI guides you through several panels to specify the pixelation of the video:
-1. Select the start frame
-2. Select the start area
-3. Select the end frame
-4. Select the end area
-5. The pixelation is applied from the start area in the start frame to the end area in the end frame.
-   You can review the whole clip filp book style, and you can save the video,
-   and/or start at 1 again for an additional pixelation.
+The application guides you through several panels to specify the pixelation
+of one or more (moving) objects in a video.
+Clicking  anywhere with the secondary (usually right) mouse button
+is a shortcut for clicking the `▷ Next` button.
+
+1. _(tba: Cut video start: select the first frame -
+   all frames before the selected one will be discarded.)_
+2. _(tba: Cut video end: select the last frame -
+   all frames after the selected one will be discarded.)_
+3. Select pixelation start by selecting frame and area.
+4. Select pixelation stop by selecting frame and area.
+   Normally, clicking the `▷ Next` button will take you to the following panel.
+   This panel behaves differently: it is repeated until you click the `✓ Apply` button,
+   allowing chained pixelations to break up non-linear movements of objects
+   in the video into smaller linear movement sections.
+5. The pixelation is applied using linear movements of the pixelated area
+   in each section between the consecutive “stations” of the
+   pixelation route selected in the previous panels.
+   You can review the whole clip flip book style, and you can save the video,
+   and/or jump to the pixelation start selection panel (#3) for an additional pixelation.
 
 Please note that video length is limited to 10000 frames, that is roughly
 5′33″ for NTSC or 6′40″ for PAL videos.

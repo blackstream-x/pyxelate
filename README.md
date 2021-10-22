@@ -18,10 +18,10 @@ The easiest way to use the scripts in this module is to set up
 [file manager integration](docs/file-manager-integration.md) and
 start the pixelation GUI from your file manager’s context menu.
 
-Alternatively, you can start the **autoselect.py** script with
+Alternatively, you can start the **pixelate.py** script with
 the image or video file to pixelate as a command line parameter:
 
-`autoselect.py example.jpg`
+`pixelate.py example.jpg`
 
 This will start **pixelate_image.py** for image files
 or **pixelate_video.py** for video files.

@@ -26,15 +26,15 @@ Current frame:
     If selected, the video will be cropped when exporting.
     The darkened frame will be cut off.
 
-End frame:
-  Number: The number of the current pixelation end frame
+Pixelation start frame:
+  Number: The number of the current pixelation start frame
   Zoom factor: Shows the zoom factor of the loaded frame
   Crop video: |
     If selected, the video will be cropped when exporting.
     The darkened frame will be cut off.
 
-Start frame:
-  Number: The number of the current pixelation start frame
+Pixelation stop frame:
+  Number: The number of the current pixelation stop frame
   Zoom factor: Shows the zoom factor of the loaded frame
   Crop video: |
     If selected, the video will be cropped when exporting.
@@ -58,7 +58,7 @@ Export settings:
     FFmpeg preset. Slower presets provide better compression.
     According to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),
     the slowest preset you have patience for is recommended.
-    Default is 'slow'.
+    Default is 'ultrafast'.
   Include original audio: |
     If selected, the audio stream from the original video
     will be included in the exported video.

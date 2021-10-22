@@ -66,6 +66,7 @@ RECTANGULAR_SHAPES = (RECT, SQUARE)
 QUADRATIC_SHAPES = (CIRCLE, SQUARE)
 ALL_SHAPES = ELLIPTIC_SHAPES + RECTANGULAR_SHAPES
 
+DEFAULT_TILESIZE = 25
 MINIMUM_TILESIZE = 10
 MAXIMUM_TILESIZE = 200
 TILESIZE_INCREMENT = 5
@@ -109,8 +110,10 @@ MOUSE_DRAG_ACTIONS = {
 }
 
 # Grid parameters
-WITH_BORDER = dict(borderwidth=2, padx=5, pady=5, relief=tkinter.GROOVE)
+BUTTONS_GRID_W = dict(padx=3, pady=3, sticky=tkinter.W)
+BUTTONS_GRID_E = dict(padx=3, pady=3, sticky=tkinter.E)
 GRID_FULLWIDTH = dict(padx=4, pady=2, sticky=tkinter.E + tkinter.W)
+WITH_BORDER = dict(borderwidth=2, padx=5, pady=5, relief=tkinter.GROOVE)
 
 
 #
@@ -223,13 +226,13 @@ class InterfacePlugin:
     to access its varuables and widgets
     """
 
-    def __init__(self, ui_instance):
-        """Store the ui_instance"""
-        self.ui_instance = ui_instance
-        self.tkvars = ui_instance.tkvars
-        self.vars = ui_instance.vars
-        self.widgets = ui_instance.widgets
-        self.main_window = ui_instance.main_window
+    def __init__(self, application):
+        """Store the application"""
+        self.application = application
+        self.tkvars = application.tkvars
+        self.vars = application.vars
+        self.widgets = application.widgets
+        self.main_window = application.main_window
 
 
 class Callbacks(InterfacePlugin):
@@ -382,10 +385,10 @@ class Callbacks(InterfacePlugin):
         self.vars.drag_data.y = current_y
         # Update the selection (position only)
         new_position = self.__get_translated_coordinates(TAG_INDICATOR)
-        self.ui_instance.update_selection(
+        self.application.update_selection(
             center_x=new_position.center_x, center_y=new_position.center_y
         )
-        self.ui_instance.pixelate_selection()
+        self.application.pixelate_selection()
         return True
 
     def move_sel_drag_start(self, event):
@@ -444,7 +447,7 @@ class Callbacks(InterfacePlugin):
             #
         #
         if adjusted_dimensions:
-            self.ui_instance.update_selection(**adjusted_dimensions)
+            self.application.update_selection(**adjusted_dimensions)
         #
         # Trigger the selection change explicitly
         self.update_selection()
@@ -584,7 +587,7 @@ class Callbacks(InterfacePlugin):
                 tags=TAG_RUBBERBAND,
             )
         # Update the selection
-        self.ui_instance.update_selection(
+        self.application.update_selection(
             **self.__get_translated_coordinates(TAG_RUBBERBAND)
         )
         return True
@@ -592,7 +595,7 @@ class Callbacks(InterfacePlugin):
     def redraw_indicator(self, *unused_arguments):
         """Trigger redrawing of the indicator"""
         try:
-            self.ui_instance.draw_indicator()
+            self.application.draw_indicator()
         except AttributeError as error:
             logging.warning("%s", error)
         #
@@ -636,7 +639,7 @@ class Callbacks(InterfacePlugin):
     def toggle_preview(self, *unused_arguments):
         """Trigger preview update"""
         try:
-            self.ui_instance.show_image()
+            self.application.show_image()
         except AttributeError as error:
             logging.warning("%s", error)
         #
@@ -648,10 +651,10 @@ class Callbacks(InterfacePlugin):
     def update_selection(self, *unused_arguments):
         """Trigger update after selection changed"""
         if self.vars.trace:
-            self.ui_instance.pixelate_selection()
-            self.ui_instance.draw_indicator()
+            self.application.pixelate_selection()
+            self.application.draw_indicator()
         #
-        self.ui_instance.toggle_height()
+        self.application.toggle_height()
 
 
 class Panels(InterfacePlugin):
@@ -659,23 +662,18 @@ class Panels(InterfacePlugin):
     """Panel and panel component methods"""
 
     def component_shape_settings(
-        self, settings_frame, fixed_tilesize=False, allowed_shapes=ALL_SHAPES
+        self, settings_frame, allowed_shapes=ALL_SHAPES
     ):
         """Show the shape part of the settings frame"""
-        self.ui_instance.heading_with_help_button(settings_frame, "Selection")
+        self.application.heading_with_help_button(settings_frame, "Selection")
         label = tkinter.Label(settings_frame, text="Tile size:")
-        if fixed_tilesize:
-            ts_state = tkinter.DISABLED
-        else:
-            ts_state = "readonly"
-        #
         tilesize = tkinter.Spinbox(
             settings_frame,
             from_=MINIMUM_TILESIZE,
             to=MAXIMUM_TILESIZE,
             increment=TILESIZE_INCREMENT,
             justify=tkinter.RIGHT,
-            state=ts_state,
+            state="readonly",
             width=4,
             textvariable=self.tkvars.selection.tilesize,
         )
@@ -757,7 +755,7 @@ class Panels(InterfacePlugin):
         preview_active = tkinter.Checkbutton(
             settings_frame,
             anchor=tkinter.W,
-            command=self.ui_instance.show_image,
+            command=self.application.show_image,
             text="Show preview",
             variable=self.tkvars.show_preview,
             indicatoron=1,
@@ -770,7 +768,7 @@ class Panels(InterfacePlugin):
 
     def component_file_info(self, parent_frame):
         """Show information about the current file"""
-        self.ui_instance.heading_with_help_button(
+        self.application.heading_with_help_button(
             parent_frame, "Original file"
         )
         label = tkinter.Label(parent_frame, textvariable=self.tkvars.file_name)
@@ -778,19 +776,46 @@ class Panels(InterfacePlugin):
         choose_button = tkinter.Button(
             parent_frame,
             text="Choose another file",
-            command=self.ui_instance.open_file,
+            command=self.application.open_file,
         )
         choose_button.grid(sticky=tkinter.W, columnspan=4)
 
-    def component_image_info(
-        self, parent_frame, frame_position, change_enabled=False
-    ):
+    def component_image_info(self, parent_frame):
         """Show information about the current image"""
         raise NotImplementedError
 
+    def component_image_on_canvas(self):
+        """Show the image on a canvas"""
+        image_frame = tkinter.Frame(self.widgets.action_area, **WITH_BORDER)
+        self.widgets.canvas = tkinter.Canvas(
+            image_frame,
+            width=self.vars.canvas_width,
+            height=self.vars.canvas_height,
+        )
+        self.vars.tk_image = self.vars.image.tk_original
+        self.widgets.canvas.create_image(
+            0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags=TAG_IMAGE
+        )
+        self.widgets.canvas.grid()
+        self.application.callbacks.set_canvas_cursor()
+        self.application.draw_indicator()
+        self.application.pixelate_selection()
+        self.vars.trace = True
+        # add bindings to create a new selector
+        self.widgets.canvas.bind(
+            "<ButtonPress-1>", self.application.callbacks.drag_start
+        )
+        self.widgets.canvas.bind(
+            "<ButtonRelease-1>", self.application.callbacks.drag_stop
+        )
+        self.widgets.canvas.bind(
+            "<B1-Motion>", self.application.callbacks.drag_move
+        )
+        image_frame.grid(row=1, column=0, rowspan=3, **GRID_FULLWIDTH)
+
     def component_indicator_colours(self, parent_frame):
         """Show colours selections"""
-        self.ui_instance.heading_with_help_button(parent_frame, "Colours")
+        self.application.heading_with_help_button(parent_frame, "Colours")
         label = tkinter.Label(parent_frame, text="Indicator outline:")
         color_opts = tkinter.OptionMenu(
             parent_frame,
@@ -820,44 +845,13 @@ class Panels(InterfacePlugin):
 
     def component_select_area(
         self,
-        frame_position=None,
-        change_enabled=False,
-        fixed_tilesize=False,
         allowed_shapes=ALL_SHAPES,
     ):
         """Show the image on a canvas and let
         the user select the area to be pixelated
         """
-        image_frame = tkinter.Frame(self.widgets.action_area, **WITH_BORDER)
-        self.widgets.canvas = tkinter.Canvas(
-            image_frame,
-            width=self.vars.canvas_width,
-            height=self.vars.canvas_height,
-        )
-        self.vars.tk_image = self.vars.image.tk_original
-        self.widgets.canvas.create_image(
-            0, 0, image=self.vars.tk_image, anchor=tkinter.NW, tags=TAG_IMAGE
-        )
-        self.widgets.canvas.grid()
-        self.ui_instance.callbacks.set_canvas_cursor()
-        self.ui_instance.draw_indicator()
-        self.ui_instance.pixelate_selection()
-        self.vars.trace = True
-        # add bindings to create a new selector
-        self.widgets.canvas.bind(
-            "<ButtonPress-1>", self.ui_instance.callbacks.drag_start
-        )
-        self.widgets.canvas.bind(
-            "<ButtonRelease-1>", self.ui_instance.callbacks.drag_stop
-        )
-        self.widgets.canvas.bind(
-            "<B1-Motion>", self.ui_instance.callbacks.drag_move
-        )
-        image_frame.grid(row=1, column=0, rowspan=3, **GRID_FULLWIDTH)
+        self.component_image_on_canvas()
         self.sidebar_settings(
-            frame_position,
-            change_enabled=change_enabled,
-            fixed_tilesize=fixed_tilesize,
             allowed_shapes=allowed_shapes,
         )
 
@@ -885,9 +879,9 @@ class Panels(InterfacePlugin):
             self.vars.supported_drag_actions.append(single_drag_action)
         #
 
-    def component_zoom_factor(self, parent_frame, display_ratio):
+    def component_zoom_factor(self, parent_frame):
         """Show the zoom factor according to display ratio"""
-        # FIXME: use display ratio from self.vars.image
+        display_ratio = self.vars.image.display_ratio
         if display_ratio == int(display_ratio):
             factor = int(display_ratio)
         else:
@@ -914,26 +908,20 @@ class Panels(InterfacePlugin):
 
     def sidebar_settings(
         self,
-        frame_position,
-        change_enabled=False,
-        fixed_tilesize=False,
         allowed_shapes=ALL_SHAPES,
     ):
         """Show the settings sidebar"""
         settings_frame = tkinter.Frame(self.widgets.action_area, **WITH_BORDER)
         self.component_file_info(settings_frame)
-        self.component_image_info(
-            settings_frame, frame_position, change_enabled=change_enabled
-        )
+        self.component_image_info(settings_frame)
+        self.component_select_drag_action(settings_frame)
         self.component_shape_settings(
             settings_frame,
-            fixed_tilesize=fixed_tilesize,
             allowed_shapes=allowed_shapes,
         )
-        self.component_select_drag_action(settings_frame)
         settings_frame.columnconfigure(4, weight=100)
         settings_frame.grid(row=0, column=1, rowspan=2, **GRID_FULLWIDTH)
-        self.ui_instance.toggle_height()
+        self.application.toggle_height()
 
 
 class UserInterface:
@@ -943,10 +931,12 @@ class UserInterface:
     phase_open_file = "open_file"
     phases = (phase_open_file,)
     panel_names = {}
+    looped_panels = set()
 
     action_class = InterfacePlugin
     callback_class = Callbacks
     panel_class = Panels
+    post_panel_action_class = InterfacePlugin
     rollback_class = InterfacePlugin
 
     script_name = "<module pyxelate.app>"
@@ -971,6 +961,7 @@ class UserInterface:
         self.vars = Namespace(
             current_panel=None,
             errors=[],
+            post_panel_methods={},
             canvas_width=canvas_width,
             canvas_height=canvas_height,
             tk_image=None,
@@ -978,6 +969,7 @@ class UserInterface:
             original_path=file_path,
             trace=False,
             unapplied_changes=False,
+            loop_counter={key: [] for key in self.looped_panels},
             undo_buffer=[],
             supported_drag_actions=[],
             drag_data=Namespace(
@@ -995,6 +987,7 @@ class UserInterface:
         self.actions = self.action_class(self)
         self.callbacks = self.callback_class(self)
         self.panels = self.panel_class(self)
+        self.post_panel_actions = self.post_panel_action_class(self)
         self.rollbacks = self.rollback_class(self)
         # Fill self.tkvars after the callbaks plugin has been initialized
         self.tkvars.update(
@@ -1051,6 +1044,19 @@ class UserInterface:
         (additional widgets)
         """
         raise NotImplementedError
+
+    def execute_post_panel_action(self):
+        """Execute the post panel action for the current panel"""
+        try:
+            method = self.vars.post_panel_methods.pop(self.vars.current_panel)
+        except KeyError:
+            logging.debug(
+                "Post-panel action for %r not defined or already executed.",
+                self.vars.current_panel,
+            )
+        else:
+            method()
+        #
 
     def open_file(
         self, keep_existing=False, preset_path=None, quit_on_empty_choice=False
@@ -1232,6 +1238,34 @@ class UserInterface:
         """
         raise NotImplementedError
 
+    def set_default_selection(self, tilesize=DEFAULT_TILESIZE):
+        """Set default selection parameters from the following:
+        shape: oval,
+        width: 20% of the image width,
+        height: same as width,
+        position: image center
+        """
+        (im_width, im_height) = self.vars.image.original.size
+        sel_width = self.tkvars.selection.width.get()
+        if not sel_width:
+            # Set initial selection width to 20% of image width
+            sel_width = max(INITIAL_SELECTION_SIZE, round(im_width / 5))
+        #
+        sel_height = self.tkvars.selection.height.get()
+        if not sel_height:
+            sel_height = sel_width
+        #
+        center_x = self.tkvars.selection.center_x.get() or im_width // 2
+        center_y = self.tkvars.selection.center_y.get() or im_height // 2
+        self.update_selection(
+            center_x=center_x,
+            center_y=center_y,
+            width=min(sel_width, im_width),
+            height=min(sel_height, im_height),
+            shape=self.tkvars.selection.shape.get() or CIRCLE,
+            tilesize=self.tkvars.selection.tilesize.get() or tilesize,
+        )
+
     def show_image(self):
         """Show image or preview according to the show_preview setting"""
         canvas = self.widgets.canvas
@@ -1251,57 +1285,66 @@ class UserInterface:
         )
         canvas.tag_lower(TAG_IMAGE, TAG_INDICATOR)
 
-    def __next_action(self):
-        """Execute the next action"""
-        current_index = self.phases.index(self.vars.current_panel)
-        next_index = current_index + 1
+    def jump_to_panel(self, panel_name):
+        """Jump to the specified panel
+        after executing its action method
+        """
+        method_display = f"Action method for panel {panel_name!r}"
         try:
-            next_phase = self.phases[next_index]
-        except IndexError as error:
-            raise ValueError(
-                f"Phase number #{next_index} out of range"
-            ) from error
-        #
-        method_display = (
-            f"Action method for phase #{next_index} ({next_phase})"
-        )
-        try:
-            action_method = getattr(self.actions, next_phase)
+            action_method = getattr(self.actions, panel_name)
         except AttributeError:
             logging.debug("%s is undefined", method_display)
         else:
             try:
                 action_method()
-            except NotImplementedError as error:
-                raise ValueError(
+            except NotImplementedError:
+                self.vars.errors.append(
                     f"{method_display} has not been implemented yet"
-                ) from error
+                )
+            except ValueError as error:
+                self.vars.errors.append(str(error))
             #
         #
-        self.vars.update(current_phase=next_phase)
-
-    def next_panel(self):
-        """Execute the next action and go to the next panel"""
-        try:
-            self.__next_action()
-        except ValueError as error:
-            self.vars.errors.append(str(error))
-        #
+        self.vars.update(current_phase=panel_name)
         self.__show_panel()
 
+    def next_panel(self, *unused_arguments):
+        """Go to the next panel,
+        executing the old panel’s post-panel action mrthod,
+        and then the new panel’s (pre-panel) action method
+        before showing the new panel
+        """
+        self.execute_post_panel_action()
+        if self.vars.current_panel in self.looped_panels:
+            panel_name = self.vars.current_panel
+            self.vars.loop_counter[panel_name].append(False)
+        else:
+            current_index = self.phases.index(self.vars.current_panel)
+            next_index = current_index + 1
+            try:
+                panel_name = self.phases[next_index]
+            except IndexError:
+                self.vars.errors.append(
+                    f"Phase number #{next_index} out of range"
+                )
+            #
+        #
+        self.jump_to_panel(panel_name)
+
     def previous_panel(self):
-        """Go to the next panel"""
-        phase_name = self.vars.current_panel
-        phase_index = self.phases.index(phase_name)
+        """Go to the previous panel, executing the current panel’s
+        rollback method before.
+        """
+        panel_name = self.vars.current_panel
+        phase_index = self.phases.index(panel_name)
         method_display = (
-            f"Rollback method for phase #{phase_index} ({phase_name})"
+            f"Rollback method for panel #{phase_index} ({panel_name})"
         )
         try:
-            rollback_method = getattr(self.rollbacks, phase_name)
+            rollback_method = getattr(self.rollbacks, panel_name)
         except AttributeError:
             logging.warning("%s is undefined", method_display)
         else:
-            self.vars.update(current_phase=self.phases[phase_index - 1])
             try:
                 rollback_method()
             except NotImplementedError:
@@ -1309,8 +1352,23 @@ class UserInterface:
                     f"{method_display} has not been implemented yet"
                 )
             #
+            if panel_name not in self.looped_panels or self.go_back_allowed():
+                self.vars.update(current_phase=self.phases[phase_index - 1])
+            #
         #
         self.__show_panel()
+
+    def go_back_allowed(self):
+        """Return True if going back is allowed in a looped panel,
+        False if not.
+        The looped panel’s rollback medod is executed
+        directly before this method.
+        """
+        try:
+            return self.vars.loop_counter[self.vars.current_panel].pop()
+        except IndexError:
+            return False
+        #
 
     def pre_quit_check(self):
         """Pre-quit checks eg. for files to save.
@@ -1326,7 +1384,7 @@ class UserInterface:
             self.main_window.destroy()
         #
 
-    def show_additional_buttons(self, buttons_area, buttons_grid):
+    def show_additional_buttons(self, buttons_area):
         """Additional buttons for the pixelate_image script.
         Return the number of rows (= the row index for th last row)
         """
@@ -1398,6 +1456,16 @@ class UserInterface:
         #
         self.__show_errors()
         logging.debug("Showing panel %r", self.vars.current_panel)
+        try:
+            self.vars.post_panel_methods[self.vars.current_phase] = getattr(
+                self.post_panel_actions, self.vars.current_phase
+            )
+        except AttributeError:
+            logging.debug(
+                "No post-panel method defined for %r",
+                self.vars.current_panel,
+            )
+        #
         gui.Heading(
             self.widgets.action_area,
             text=self.panel_names[self.vars.current_panel],
@@ -1410,22 +1478,22 @@ class UserInterface:
         panel_method()
         self.widgets.action_area.grid(**GRID_FULLWIDTH)
         #
+        # Show global application buttons
         buttons_area = tkinter.Frame(self.widgets.action_area)
-        buttons_grid = dict(padx=5, pady=5, sticky=tkinter.E)
-        #
-        last_row = self.show_additional_buttons(buttons_area, buttons_grid)
+        last_row = self.show_additional_buttons(buttons_area)
+        self.callbacks.update_buttons()
         help_button = tkinter.Button(
-            buttons_area, text="\u2753 Help", command=self.show_help
+            buttons_area, text="Help", command=self.show_help
         )
-        help_button.grid(row=last_row, column=0, **buttons_grid)
         about_button = tkinter.Button(
             buttons_area, text="\u24d8 About", command=self.__show_about
         )
-        about_button.grid(row=last_row, column=1, **buttons_grid)
         quit_button = tkinter.Button(
-            buttons_area, text="\u23fb Quit", command=self.quit
+            buttons_area, text="\u2717 Quit", command=self.quit
         )
-        quit_button.grid(row=last_row, column=2, **buttons_grid)
+        help_button.grid(row=last_row, column=0, **BUTTONS_GRID_E)
+        about_button.grid(row=last_row, column=1, **BUTTONS_GRID_W)
+        quit_button.grid(row=last_row, column=2, **BUTTONS_GRID_E)
         self.widgets.action_area.rowconfigure(2, weight=100)
         buttons_area.grid(row=3, column=1, sticky=tkinter.E)
         self.main_window.bind_all(

@@ -229,7 +229,7 @@ def get_stream_info(
     for line in ffprobe_result.stdout.decode().splitlines():
         key, value = line.split("=", 1)
         stream_info[key] = value
-        logging.debug("Read %r = %r", key, value)
+        # logging.debug("Read %r = %r", key, value)
     #
     return stream_info
 

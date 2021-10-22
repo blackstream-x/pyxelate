@@ -138,7 +138,7 @@ class FrozenSelection:
         return repr(tuple(self.effective_values.values()))
 
 
-class ImageCallbacks(core.Callbacks):
+class Callbacks(core.Callbacks):
 
     """Callbacks for the new user interface"""
 
@@ -178,13 +178,11 @@ class Panels(core.Panels):
 
     """Panels and panel components"""
 
-    def component_image_info(
-        self, parent_frame, frame_position, change_enabled=False
-    ):
-        """Show information about the current video frame"""
-        self.ui_instance.heading_with_help_button(parent_frame, "Image")
+    def component_image_info(self, parent_frame):
+        """Show information about the image"""
+        self.application.heading_with_help_button(parent_frame, "Image")
         #
-        self.component_zoom_factor(parent_frame, self.vars.image.display_ratio)
+        self.component_zoom_factor(parent_frame)
         crop_active = tkinter.Checkbutton(
             parent_frame,
             anchor=tkinter.W,
@@ -200,7 +198,8 @@ class Panels(core.Panels):
 
     def select_area(self):
         """Panel for the "Select area" phase"""
-        self.component_select_area()
+        self.component_image_on_canvas()
+        self.sidebar_settings()
 
 
 class ImageUI(core.UserInterface):
@@ -213,7 +212,7 @@ class ImageUI(core.UserInterface):
     version = VERSION
     copyright_notice = COPYRIGHT_NOTICE
 
-    callback_class = ImageCallbacks
+    callback_class = Callbacks
     panel_class = Panels
 
     def __init__(self, file_path, options):
@@ -330,49 +329,24 @@ class ImageUI(core.UserInterface):
 
     def load_file(self, file_path):
         """Load the image"""
-        self.vars.image = pixelations.ImagePixelation(
-            file_path,
-            canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
+        self.vars.update(
+            image=pixelations.ImagePixelation(
+                file_path,
+                canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
+            )
         )
-        # set selection sizes and reduce them
-        # to the image dimensions if necessary
-        (im_width, im_height) = self.vars.image.original.size
-        logging.debug(self.tkvars)
-        sel_width = self.tkvars.selection.width.get()
-        if not sel_width:
-            # Set initial selection width to 20% of image width
-            sel_width = max(core.INITIAL_SELECTION_SIZE, round(im_width / 5))
-        #
-        sel_height = self.tkvars.selection.height.get()
-        if not sel_height:
-            sel_height = sel_width
-        #
-        self.update_selection(
-            center_x=im_width // 2,
-            center_y=im_height // 2,
-            width=min(sel_width, im_width),
-            height=min(sel_height, im_height),
-        )
-        # set the shape
-        if not self.tkvars.selection.shape.get():
-            self.tkvars.selection.shape.set(core.OVAL)
-        #
-        # set tilesize
-        if not self.tkvars.selection.tilesize.get():
-            self.tkvars.selection.tilesize.set(pixelations.DEFAULT_TILESIZE)
-        #
+        self.set_default_selection()
         # set the show_preview variable by default
         self.tkvars.show_preview.set(1)
         # set the original path and displayed file name
-        self.vars.original_path = file_path
+        self.vars.update(original_path=file_path, unapplied_changes=False)
         self.tkvars.file_name.set(file_path.name)
-        self.vars.unapplied_changes = False
         self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
         self.tkvars.buttonstate.save.set(tkinter.DISABLED)
 
     def pre_quit_check(self):
         """Check if there are unsaved changes
-        before exitiong the application
+        before exiting the application
         """
         if self.__get_save_recommendation(ask_to_apply=False):
             if messagebox.askyesno("Unsaved Changes", "Save your changes?"):
@@ -446,29 +420,28 @@ class ImageUI(core.UserInterface):
         self.vars.unapplied_changes = False
         return True
 
-    def show_additional_buttons(self, buttons_area, buttons_grid):
+    def show_additional_buttons(self, buttons_area):
         """Additional buttons for the pixelate_image script"""
-        self.widgets.buttons.undo = tkinter.Button(
-            buttons_area,
-            text="\u238c Undo",
-            command=self.revert_last_pixelation,
+        self.widgets.buttons.update(
+            undo=tkinter.Button(
+                buttons_area,
+                text="\u238c Undo",
+                command=self.revert_last_pixelation,
+            ),
+            apply=tkinter.Button(
+                buttons_area,
+                text="\u2713 Apply",
+                command=self.apply_pixelation,
+            ),
+            save=tkinter.Button(
+                buttons_area,
+                text="\u2386 Save",
+                command=self.save_file,
+            ),
         )
-        self.widgets.buttons.undo.grid(row=0, column=0, **buttons_grid)
-        self.widgets.buttons.apply = tkinter.Button(
-            buttons_area, text="\u2713 Apply", command=self.apply_pixelation
-        )
-        self.widgets.buttons.apply.grid(row=0, column=1, **buttons_grid)
-        try:
-            self.widgets.buttons.save = tkinter.Button(
-                buttons_area, text="\U0001f5ab Save", command=self.save_file
-            )
-        except tkinter.TclError:
-            self.widgets.buttons.save = tkinter.Button(
-                buttons_area, text="\u2386 Save", command=self.save_file
-            )
-        #
-        self.widgets.buttons.save.grid(row=0, column=2, **buttons_grid)
-        self.callbacks.update_buttons()
+        self.widgets.buttons.undo.grid(row=0, column=0, **core.BUTTONS_GRID_E)
+        self.widgets.buttons.apply.grid(row=0, column=1, **core.BUTTONS_GRID_W)
+        self.widgets.buttons.save.grid(row=0, column=2, **core.BUTTONS_GRID_E)
         return 1
 
 

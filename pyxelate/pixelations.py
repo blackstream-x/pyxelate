@@ -666,9 +666,105 @@ class MultiFramePixelation:
         """Get the intermediate value
         at frame# start.frame + offset
         """
-        return self.start[item] + round(self.gradients[item] * offset)
+        return self.start[item] + round(self.gradients.get(item, 0) * offset)
 
-    def pixelate_frames(self, tilesize, shape, start, end):
+    def pixelate_segment(self, shape, start, end):
+        """Pixelate the frames in the segment from start to end,
+        and yield a progress fraction.
+        start and end must be Namespaces or dicts
+        containing frame, tilesize, center_x, center_y, width and height
+        """
+        processed_frames = 0
+        already_pixelated = 0
+        start_frame = start["frame"]
+        end_frame = end["frame"]
+        frames_diff = end_frame - start_frame
+        total_frames = frames_diff + 1
+        if frames_diff < 0:
+            raise ValueError(
+                "Stations not in sequential frame order,"
+                " ignoring this segment!"
+            )
+        #
+        self.start = start
+        self.gradients.clear()
+        try:
+            for item in ("center_x", "center_y", "width", "height"):
+                self.gradients[item] = Fraction(
+                    end[item] - start[item], frames_diff
+                )
+            #
+        except ZeroDivisionError:
+            pass
+        #
+        tilesize = end["tilesize"]
+        for current_frame in range(start_frame, end_frame + 1):
+            file_name = self.file_name_pattern % current_frame
+            if (self.target_path / file_name).is_file():
+                logging.debug(
+                    "Ignoring frame# %r: already pixelated", current_frame
+                )
+                already_pixelated += 1
+                processed_frames += 1
+                continue
+            #
+            source_frame = FramePixelation(
+                self.source_path / file_name,
+                canvas_size=None,
+                tilesize=tilesize,
+            )
+            offset = current_frame - start_frame
+            source_frame.set_shape(
+                (
+                    self.get_intermediate_value("center_x", offset),
+                    self.get_intermediate_value("center_y", offset),
+                ),
+                shape,
+                (
+                    self.get_intermediate_value("width", offset),
+                    self.get_intermediate_value("height", offset),
+                ),
+            )
+            source_frame.result.save(
+                self.target_path / file_name, quality=self.quality
+            )
+            processed_frames += 1
+            yield round(Fraction(100 * processed_frames, total_frames))
+        #
+        logging.debug("Segment pixelation results:")
+        logging.debug(
+            " - %r frames already pixelated and not replaced",
+            already_pixelated,
+        )
+        logging.debug(
+            " - Pixelated %r of %r frames",
+            processed_frames - already_pixelated,
+            total_frames,
+        )
+
+    def pixelate_route(self, shape, stations):
+        """Pixelate the frames and yield a progress fraction
+        stations must be a list of minimum 2 Namespaces or dicts
+        containing frame, tilesize, center_x, center_y, width and height
+        """
+        route_stops = stations[:]
+        exported_segments = 0
+        while True:
+            start = route_stops.pop(0)
+            try:
+                end = route_stops[0]
+            except IndexError:
+                break
+            #
+            for progress in self.pixelate_segment(shape, start, end):
+                yield progress
+            #
+            exported_segments += 1
+        #
+        logging.debug("Route pixelation results:")
+        logging.debug(" - Pixelated %r segments.", exported_segments)
+
+    def original_pixelate_frames(self, tilesize, shape, start, end):
         """Pixelate the frames and yield a progress fraction
         start and end must be Namespaces or dicts
         containing frame, center_x, center_y, width and height
