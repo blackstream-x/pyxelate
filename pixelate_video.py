@@ -92,8 +92,8 @@ PHASES = (
 )
 
 PANEL_NAMES = {
-    FIRST_FRAME: "Cut your video: select the wanted video begin, then right-click (or 'Next')",
-    LAST_FRAME: "Cut your video: select the wanted video end, then right-click (or 'Next')",
+    FIRST_FRAME: "Cut your video: select the beginning of the desired clip, then right-click (or 'Next')",
+    LAST_FRAME: "Cut your video: select the end of the desired clip, then right-click (or 'Next')",
     START_AREA: "Pixelate a segment: select a start frame and area, then right-click (or 'Next')",
     STOP_AREA: "Pixelate a segment: select an end frame and area, then right-click (or 'Next'), then 'Apply'",
     PREVIEW: "Preview/Export",
