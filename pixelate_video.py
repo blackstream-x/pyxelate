@@ -174,7 +174,7 @@ class TemporaryFramesPath(core.InterfacePlugin):
             #
         #
         self.temporary_storage = tempfile.TemporaryDirectory()
-        logging.info("Created tempdir %r", self.temporary_storage.name)
+        logging.debug("Created tempdir %r", self.temporary_storage.name)
         temporary_path = pathlib.Path(self.temporary_storage.name)
         new_number = 1
         for old_number in range(
@@ -211,7 +211,7 @@ class TemporaryFramesPath(core.InterfacePlugin):
         #
         logging.debug("Moved files back to %s", original_name)
         self.temporary_storage.cleanup()
-        logging.info(
+        logging.debug(
             "Deleted temporary directory %s", self.temporary_storage.name
         )
 
@@ -688,7 +688,7 @@ class PostPanelActions(core.InterfacePlugin):
         self.vars.update(
             modified_frames=tempfile.TemporaryDirectory(),
         )
-        logging.info("Created tempdir %r", self.vars.modified_frames.name)
+        logging.debug("Created tempdir %r", self.vars.modified_frames.name)
 
     def stop_area(self):
         """Append coordinates (current frame and selection)
@@ -988,7 +988,7 @@ class VideoUI(core.UserInterface):
                 show_entries=ffmw.ENTRIES_ALL,
             )
         )
-        logging.info("%r has audio: %r", file_path.name, has_audio)
+        logging.debug("%r has audio: %r", file_path.name, has_audio)
         self.tkvars.export.include_audio.set(int(has_audio))
         self.vars.update(has_audio=has_audio)
         label = tkinter.Label(progress.body, text="Examining video stream …")
@@ -1095,7 +1095,7 @@ class VideoUI(core.UserInterface):
         for tempdir in (self.vars.original_frames, self.vars.modified_frames):
             try:
                 tempdir.cleanup()
-                logging.info("Deleted temporary directory %s", tempdir.name)
+                logging.debug("Deleted temporary directory %s", tempdir.name)
             except AttributeError:
                 pass
             #
@@ -1347,7 +1347,7 @@ class VideoUI(core.UserInterface):
         )
         # Create a temorary directory for original frames
         self.vars.update(original_frames=tempfile.TemporaryDirectory())
-        logging.info("Created tempdir %r", self.vars.original_frames.name)
+        logging.debug("Created tempdir %r", self.vars.original_frames.name)
         # Split into frames
         split_exec = ffmw.FFmpegWrapper(
             "-i",
