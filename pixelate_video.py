@@ -1102,6 +1102,12 @@ class VideoUI(core.UserInterface):
         #
         return True
 
+    def resize_selection(self, width=None, height=None):
+        """Change selection size only in the suitable panels"""
+        if self.vars.current_panel in (START_AREA, STOP_AREA):
+            super().resize_selection(width=width, height=height)
+        #
+
     def save_and_exit(self):
         """Save and exit"""
         self.save_file()

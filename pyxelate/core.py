@@ -1502,6 +1502,13 @@ class UserInterface:
         self.main_window.bind_all(
             "<KeyPress-Next>", self.callbacks.next_drag_action
         )
+        # Mouse wheel bindings
+        self.main_window.bind_all(
+            "<Button-4>", self.increase_selection_size
+        )
+        self.main_window.bind_all(
+            "<Button-5>", self.decrease_selection_size
+        )
 
     def toggle_height(self):
         """Toggle height spinbox to follow width"""
@@ -1518,6 +1525,35 @@ class UserInterface:
                 textvariable=self.tkvars.selection.height,
             )
         #
+
+    def decrease_selection_size(self, *unused_event):
+        """Decrease the selection size by 1"""
+        new_dimensions = {}
+        for dimension in ("width","height"):
+            new_dimensions[dimension] = self.tkvars.selection[
+                dimension
+            ].get() - 1
+            if new_dimensions[dimension] < MINIMUM_SELECTION_SIZE:
+                new_dimensions[dimension] = MINIMUM_SELECTION_SIZE
+            #
+        #
+        self.resize_selection(**new_dimensions)
+
+    def increase_selection_size(self, *unused_event):
+        """Increase the selection size by 1"""
+        new_dimensions = {}
+        for dimension in ("width","height"):
+            new_dimensions[dimension] = self.tkvars.selection[
+                dimension
+            ].get() + 1
+        #
+        self.resize_selection(**new_dimensions)
+
+    def resize_selection(self, width=None, height=None):
+        """Change selection size only"""
+        self.update_selection(width=width, height=height)
+        self.pixelate_selection()
+        self.draw_indicator()
 
     def update_selection(self, **kwargs):
         """Update the selection for the provided key=value pairs"""
