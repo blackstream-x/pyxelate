@@ -53,7 +53,7 @@ if sys.platform == "win32":
 FFMPEG = "ffmpeg"
 FFPROBE = "ffprobe"
 
-DEFAULT_LOGLEVEL = "error"
+DEFAULT_LOGLEVEL = "quiet"
 DEFAULT_STREAM = "v"
 DEFAULT_ENTRIES = "stream=index,avg_frame_rate,r_frame_rate,duration,nb_frames"
 DEFAULT_OUTPUT_FORMAT = "default=noprint_wrappers=1"
@@ -211,6 +211,7 @@ def get_stream_info(
     select_streams=DEFAULT_STREAM,
     show_entries=DEFAULT_ENTRIES,
     output_format=DEFAULT_OUTPUT_FORMAT,
+    loglevel=DEFAULT_LOGLEVEL,
 ):
     """Return a dict containing the selected entries"""
     ffprobe_exec = ProcessWrapper(
@@ -223,7 +224,7 @@ def get_stream_info(
         str(file_path),
         executable=ffprobe_executable,
     )
-    ffprobe_exec.add_extra_arguments("-loglevel", DEFAULT_LOGLEVEL)
+    ffprobe_exec.add_extra_arguments("-loglevel", loglevel)
     ffprobe_result = ffprobe_exec.run(check=True)
     stream_info = {}
     for line in ffprobe_result.stdout.decode().splitlines():
@@ -234,7 +235,9 @@ def get_stream_info(
     return stream_info
 
 
-def count_all_frames(file_path, ffmpeg_executable=FFMPEG):
+def count_all_frames(
+    file_path, ffmpeg_executable=FFMPEG, loglevel=DEFAULT_LOGLEVEL
+):
     """Return the last progress block
     of the video frame-by-frame examination as a dict
     """
@@ -248,7 +251,7 @@ def count_all_frames(file_path, ffmpeg_executable=FFMPEG):
         os.devnull,
         executable=ffmpeg_executable,
     )
-    ffmpeg_exec.add_extra_arguments("-loglevel", DEFAULT_LOGLEVEL)
+    ffmpeg_exec.add_extra_arguments("-loglevel", loglevel)
     try:
         for line in ffmpeg_exec.stream(check=True):
             if line == "progress=continue":

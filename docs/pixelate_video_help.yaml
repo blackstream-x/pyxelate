@@ -19,33 +19,34 @@ Original file:
   Choose another file: |
     When you click this button, you can load another video file.
 
-Current frame:
-  Number: The number of the currently displayed frame
+Current frame: &frameinfo
+  Number: The number of the (currently) displayed frame
   Zoom factor: Shows the zoom factor of the loaded frame
   Crop video: |
     If selected, the video will be cropped when exporting.
     The darkened frame will be cut off.
 
 Pixelation start frame:
+  <<: *frameinfo
   Number: The number of the current pixelation start frame
-  Zoom factor: Shows the zoom factor of the loaded frame
-  Crop video: |
-    If selected, the video will be cropped when exporting.
-    The darkened frame will be cut off.
 
 Pixelation stop frame:
+  <<: *frameinfo
   Number: The number of the current pixelation stop frame
-  Zoom factor: Shows the zoom factor of the loaded frame
-  Crop video: |
-    If selected, the video will be cropped when exporting.
-    The darkened frame will be cut off.
 
-More pixelations:
-  Add another pixelation: |
-    When you click this button, the wizard goes back to the
-    first panel (Select pixelation start frame) so you can
-    add another pixelation in addition to the one that has
-    just been applied.
+Select first video frame:
+  <<: *frameinfo
+  Number: |
+    The number of the currently selected first video frame.
+    When you leave this panel, all frames preceding the selected one
+    will be cut from the video.
+
+Select last video frame:
+  <<: *frameinfo
+  Number: |
+    The number of the currently selected last video frame.
+    If this number has been changed, all frames after the selected one
+    will be cut from the video when you leave this panel.
 
 Export settings:
   CRF: |
@@ -80,8 +81,31 @@ Selection:
     For “quadratic” shapes (i.e. square and circle), the height will
     follow the width. Minimum is 20 pixels in each dimension.
   "Center at x/y": Fine-tune the selection center here.
-  Show preview: |
-    Show or suppress the preview of the not-yet-applied pixelation.
+
+Show preview:
+  "Preview …": |
+    In the panels where you select an area to be pixelated, this checkbox will
+    show or suppress the preview of the not-yet-applied pixelation.
+    Switching off the preview will result in a quicker response
+    when you resize the selection using the muse wheel.
+    If this box is checked when you click the "Save" button,
+    a preview panel will be shown instead of the save dialog.
+
+first_frame: |
+  In this panel, you can move the slider or use the controls in the sidebar
+  to change the first frame of the desired resulting video.
+  If the frame number is greater than 1, all frames preceding it
+  will be cut from the video when you leave this panel.
+
+last_frame: |
+  In this panel, you can move the slider or use the controls in the sidebar
+  to change the last frame of the desired resulting video.
+  If the frame has been changed, all frames after it
+  will be cut from the video when you leave this panel.
+  To avoid confusion by the slider jumping from the video start
+  to the video end, it just stays at the start position,
+  and if it is left unchanged, no frames will be cut from the end.
+
 
 Colours:
   Change these colours for better contrast with the image:

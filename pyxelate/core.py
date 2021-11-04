@@ -631,6 +631,7 @@ class Callbacks(InterfacePlugin):
         #
         if self.tkvars.crop.get():
             self.vars.image.set_crop_area(self.vars.crop_area)
+            self.tkvars.drag_action.set(NEW_CROP_AREA)
         else:
             self.vars.image.remove_crop_area()
         #
@@ -642,6 +643,19 @@ class Callbacks(InterfacePlugin):
             self.application.show_image()
         except AttributeError as error:
             logging.warning("%s", error)
+        #
+
+    def toggle_preview_checkbutton(self, *unused_arguments):
+        """Trigger preview checkbutton"""
+        if self.vars.disable_key_events:
+            return
+        #
+        try:
+            self.widgets.preview_active.toggle()
+        except AttributeError as error:
+            logging.warning("%s", error)
+        else:
+            self.toggle_preview()
         #
 
     def update_buttons(self, *unused_arguments):
@@ -752,19 +766,6 @@ class Panels(InterfacePlugin):
         center_x.grid(sticky=tkinter.W, row=gui.grid_row_of(label), column=1)
         label_sep.grid(sticky=tkinter.W, row=gui.grid_row_of(label), column=2)
         center_y.grid(sticky=tkinter.W, row=gui.grid_row_of(label), column=3)
-        preview_active = tkinter.Checkbutton(
-            settings_frame,
-            anchor=tkinter.W,
-            command=self.application.show_image,
-            text="Show preview",
-            variable=self.tkvars.show_preview,
-            indicatoron=1,
-        )
-        preview_active.grid(
-            sticky=tkinter.W,
-            column=0,
-            columnspan=5,
-        )
 
     def component_file_info(self, parent_frame):
         """Show information about the current file"""
@@ -879,6 +880,26 @@ class Panels(InterfacePlugin):
             self.vars.supported_drag_actions.append(single_drag_action)
         #
 
+    def component_show_preview(self, parent_frame, subject="pixelation"):
+        """Show the "Show preview" checkbutton"""
+        self.application.heading_with_help_button(parent_frame, "Show preview")
+        self.widgets.update(
+            preview_active=tkinter.Checkbutton(
+                parent_frame,
+                anchor=tkinter.W,
+                command=self.application.show_image,
+                text=f"Preview {subject}",
+                variable=self.tkvars.show_preview,
+                indicatoron=1,
+                underline=0,
+            )
+        )
+        self.widgets.preview_active.grid(
+            sticky=tkinter.W,
+            column=0,
+            columnspan=5,
+        )
+
     def component_zoom_factor(self, parent_frame):
         """Show the zoom factor according to display ratio"""
         display_ratio = self.vars.image.display_ratio
@@ -909,6 +930,7 @@ class Panels(InterfacePlugin):
     def sidebar_settings(
         self,
         allowed_shapes=ALL_SHAPES,
+        preview_subject="pixelation",
     ):
         """Show the settings sidebar"""
         settings_frame = tkinter.Frame(self.widgets.action_area, **WITH_BORDER)
@@ -919,6 +941,7 @@ class Panels(InterfacePlugin):
             settings_frame,
             allowed_shapes=allowed_shapes,
         )
+        self.component_show_preview(settings_frame, subject=preview_subject)
         settings_frame.columnconfigure(4, weight=100)
         settings_frame.grid(row=0, column=1, rowspan=2, **GRID_FULLWIDTH)
         self.application.toggle_height()
@@ -961,6 +984,7 @@ class UserInterface:
         self.vars = Namespace(
             current_panel=None,
             errors=[],
+            panel_stack=[],
             post_panel_methods={},
             canvas_width=canvas_width,
             canvas_height=canvas_height,
@@ -976,6 +1000,7 @@ class UserInterface:
                 x=0, y=0, anchor_x=0, anchor_y=0, var_x=0, var_y=0, item=None
             ),
             crop_area=Namespace(left=0, top=0, right=0, bottom=0),
+            disable_key_events=False,
         )
         self.tkvars = Namespace()
         self.widgets = Namespace(
@@ -983,6 +1008,7 @@ class UserInterface:
             # buttons_area=None,
             canvas=None,
             height=None,
+            preview_active=None,
         )
         self.actions = self.action_class(self)
         self.callbacks = self.callback_class(self)
@@ -1019,7 +1045,6 @@ class UserInterface:
             ),
         )
         self.tkvars.indicator.drag_color.set("blue")
-        self.tkvars.drag_action.set(MOVE_SELECTION)
         self.additional_variables()
         self.additional_widgets()
         #
@@ -1075,11 +1100,13 @@ class UserInterface:
         #
         while True:
             if not keep_existing or file_path is None:
+                self.vars.update(disable_key_events=True)
                 selected_file = filedialog.askopenfilename(
                     initialdir=initial_dir,
                     parent=self.main_window,
                     title=f"Load a {self.file_type}",
                 )
+                self.vars.update(disable_key_events=False)
                 if not selected_file:
                     if quit_on_empty_choice:
                         self.quit()
@@ -1135,7 +1162,11 @@ class UserInterface:
         raise NotImplementedError
 
     def heading_with_help_button(
-        self, parent_frame, subject, heading_column_span=4
+        self,
+        parent_frame,
+        subject,
+        heading_column_span=4,
+        parent_window=None,
     ):
         """A heading with an adjacent help button"""
         heading = gui.Heading(
@@ -1147,8 +1178,8 @@ class UserInterface:
 
         # Inner function for the "extra arguments" trick, see
         # <https://tkdocs.com/shipman/extra-args.html>
-        def show_help(self=self):
-            return self.show_help(topic=subject)
+        def show_help(self=self, parent_window=parent_window):
+            return self.show_help(topic=subject, parent_window=parent_window)
 
         #
         help_button = tkinter.Button(
@@ -1315,6 +1346,7 @@ class UserInterface:
         before showing the new panel
         """
         self.execute_post_panel_action()
+        self.vars.panel_stack.append(self.vars.current_panel)
         if self.vars.current_panel in self.looped_panels:
             panel_name = self.vars.current_panel
             self.vars.loop_counter[panel_name].append(False)
@@ -1352,23 +1384,9 @@ class UserInterface:
                     f"{method_display} has not been implemented yet"
                 )
             #
-            if panel_name not in self.looped_panels or self.go_back_allowed():
-                self.vars.update(current_phase=self.phases[phase_index - 1])
-            #
+            self.vars.update(current_phase=self.vars.panel_stack.pop())
         #
         self.__show_panel()
-
-    def go_back_allowed(self):
-        """Return True if going back is allowed in a looped panel,
-        False if not.
-        The looped panel’s rollback medod is executed
-        directly before this method.
-        """
-        try:
-            return self.vars.loop_counter[self.vars.current_panel].pop()
-        except IndexError:
-            return False
-        #
 
     def pre_quit_check(self):
         """Pre-quit checks eg. for files to save.
@@ -1416,19 +1434,28 @@ class UserInterface:
             self.vars.errors.clear()
         #
 
-    def show_help(self, topic="Global"):
-        """Show help for the provided topic"""
+    def show_help(self, topic=None, parent_window=None):
+        """Show help for the provided topic.
+        The topic defaults to the current panel.
+        """
+        if topic is None:
+            topic = self.vars.current_panel
+            title = f"Panel {self.panel_names[topic]!r}"
+        else:
+            title = topic
+        #
         try:
             info_sequence = list(self.vars.help[topic].items())
         except AttributeError:
             # Not a hash -> generate a heading
-            info_sequence = [(f"{topic} help:", self.vars.help[topic])]
+            info_sequence = [(None, self.vars.help[topic])]
         except KeyError:
-            info_sequence = [("Error:", f"No help for {topic} available yet")]
+            info_sequence = [("Error:", f"No help for {title} available yet")]
         #
-        gui.InfoDialog(
-            self.main_window, *info_sequence, title=f"Help ({topic})"
-        )
+        if parent_window is None:
+            parent_window = self.main_window
+        #
+        gui.InfoDialog(parent_window, *info_sequence, title=f"Help ({title})")
 
     def __show_panel(self):
         """Show a panel.
@@ -1496,19 +1523,24 @@ class UserInterface:
         quit_button.grid(row=last_row, column=2, **BUTTONS_GRID_E)
         self.widgets.action_area.rowconfigure(2, weight=100)
         buttons_area.grid(row=3, column=1, sticky=tkinter.E)
+        # Add bindings:
+        # - PgUp/PgDown keys to move through the drag action selection
         self.main_window.bind_all(
             "<KeyPress-Prior>", self.callbacks.previous_drag_action
         )
         self.main_window.bind_all(
             "<KeyPress-Next>", self.callbacks.next_drag_action
         )
-        # Mouse wheel bindings
-        self.main_window.bind_all(
-            "<Button-4>", self.increase_selection_size
+        # - "P" key (case insensitive) to toggle the preview checkbutton
+        self.widgets.action_area.bind_all(
+            "<KeyPress-P>", self.callbacks.toggle_preview_checkbutton
         )
-        self.main_window.bind_all(
-            "<Button-5>", self.decrease_selection_size
+        self.widgets.action_area.bind_all(
+            "<KeyPress-p>", self.callbacks.toggle_preview_checkbutton
         )
+        # - Mouse wheel to resize the selection
+        self.main_window.bind_all("<Button-4>", self.increase_selection_size)
+        self.main_window.bind_all("<Button-5>", self.decrease_selection_size)
 
     def toggle_height(self):
         """Toggle height spinbox to follow width"""
@@ -1529,10 +1561,10 @@ class UserInterface:
     def decrease_selection_size(self, *unused_event):
         """Decrease the selection size by 1"""
         new_dimensions = {}
-        for dimension in ("width","height"):
-            new_dimensions[dimension] = self.tkvars.selection[
-                dimension
-            ].get() - 1
+        for dimension in ("width", "height"):
+            new_dimensions[dimension] = (
+                self.tkvars.selection[dimension].get() - 1
+            )
             if new_dimensions[dimension] < MINIMUM_SELECTION_SIZE:
                 new_dimensions[dimension] = MINIMUM_SELECTION_SIZE
             #
@@ -1542,10 +1574,10 @@ class UserInterface:
     def increase_selection_size(self, *unused_event):
         """Increase the selection size by 1"""
         new_dimensions = {}
-        for dimension in ("width","height"):
-            new_dimensions[dimension] = self.tkvars.selection[
-                dimension
-            ].get() + 1
+        for dimension in ("width", "height"):
+            new_dimensions[dimension] = (
+                self.tkvars.selection[dimension].get() + 1
+            )
         #
         self.resize_selection(**new_dimensions)
 

@@ -7,7 +7,7 @@
     "Choose another file": "When you click this button, you can load another video file.\n"
   },
   "Current frame": {
-    "Number": "The number of the currently displayed frame",
+    "Number": "The number of the (currently) displayed frame",
     "Zoom factor": "Shows the zoom factor of the loaded frame",
     "Crop video": "If selected, the video will be cropped when exporting.\nThe darkened frame will be cut off.\n"
   },
@@ -21,12 +21,19 @@
     "Zoom factor": "Shows the zoom factor of the loaded frame",
     "Crop video": "If selected, the video will be cropped when exporting.\nThe darkened frame will be cut off.\n"
   },
-  "More pixelations": {
-    "Add another pixelation": "When you click this button, the wizard goes back to the\nfirst panel (Select pixelation start frame) so you can\nadd another pixelation in addition to the one that has\njust been applied.\n"
+  "Select first video frame": {
+    "Number": "The number of the currently selected first video frame.\nWhen you leave this panel, all frames preceding the selected one\nwill be cut from the video.\n",
+    "Zoom factor": "Shows the zoom factor of the loaded frame",
+    "Crop video": "If selected, the video will be cropped when exporting.\nThe darkened frame will be cut off.\n"
+  },
+  "Select last video frame": {
+    "Number": "The number of the currently selected last video frame.\nIf this number has been changed, all frames after the selected one\nwill be cut from the video when you leave this panel.\n",
+    "Zoom factor": "Shows the zoom factor of the loaded frame",
+    "Crop video": "If selected, the video will be cropped when exporting.\nThe darkened frame will be cut off.\n"
   },
   "Export settings": {
     "CRF": "Constant Rate Factor for ffmpeg (0-51).\nHigher values produce smaller files at the cost of lower quality.\nAccording to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),\na value between 17 and 28 is recommended.\nDefault is 18, producing nearly visually lossless output.\n",
-    "Preset": "FFmpeg preset. Slower presets provide better compression.\nAccording to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),\nthe slowest preset you have patience for is recommended.\nDefault is 'slow'.\n",
+    "Preset": "FFmpeg preset. Slower presets provide better compression.\nAccording to the documentation (https://trac.ffmpeg.org/wiki/Encode/H.264),\nthe slowest preset you have patience for is recommended.\nDefault is 'ultrafast'.\n",
     "Include original audio": "If selected, the audio stream from the original video\nwill be included in the exported video.\n"
   },
   "Selection": {
@@ -34,9 +41,13 @@
     "Tile size": "Change the size of the blurred tiles in intervals of 5 pixels.\nMinimum is 10 pixels, maximum 200 pixels.\n",
     "Shape": "Choose from elliptic or rectangular shapes.",
     "Width and Height": "Fine-tune selection width and height here.\nFor \u201cquadratic\u201d shapes (i.e. square and circle), the height will\nfollow the width. Minimum is 20 pixels in each dimension.\n",
-    "Center at x/y": "Fine-tune the selection center here.",
-    "Show preview": "Show or suppress the preview of the not-yet-applied pixelation.\n"
+    "Center at x/y": "Fine-tune the selection center here."
   },
+  "Show preview": {
+    "Preview \u2026": "In the panels where you select an area to be pixelated, this checkbox will\nshow or suppress the preview of the not-yet-applied pixelation.\nSwitching off the preview will result in a quicker response\nwhen you resize the selection using the muse wheel.\nIf this box is checked when you click the \"Save\" button,\na preview panel will be shown instead of the save dialog.\n"
+  },
+  "first_frame": "In this panel, you can move the slider or use the controls in the sidebar\nto change the first frame of the desired resulting video.\nIf the frame number is greater than 1, all frames preceding it\nwill be cut from the video when you leave this panel.\n",
+  "last_frame": "In this panel, you can move the slider or use the controls in the sidebar\nto change the last frame of the desired resulting video.\nIf the frame has been changed, all frames after it\nwill be cut from the video when you leave this panel.\nTo avoid confusion by the slider jumping from the video start\nto the video end, it just stays at the start position,\nand if it is left unchanged, no frames will be cut from the end.\n",
   "Colours": {
     "Change these colours for better contrast with the image": null,
     "Indicator outline": "Colour of the current indicator",

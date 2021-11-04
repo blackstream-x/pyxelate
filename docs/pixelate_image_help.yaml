@@ -1,13 +1,13 @@
-Global:
-  "pixelate_image.py": |
-    This is a script for pixelating partial areas of images.
+select_area: |
+  This is a script for pixelating partial areas of images.
 
-    Drag the selection around, resize it or create a new one.
+  Drag the selection around, resize it or create a new one.
 
-    Fine-tune selection size and position using the controls
-    in the “Selection” section of the right hand panel.
-    Click the “✓ Apply” button to apply the pixelation at the indicated
-    position, or “⎌ Undo” to undo the last applied pixelation.
+  Fine-tune selection size and position using the controls
+  in the “Selection” section of the right hand panel.
+  Click the “✓ Apply” button or the right mouse button
+  to apply the pixelation at the indicated position.
+  “⎌ Undo” will undo the last applied pixelation.
 
 Original file:
   The first line: shows the name of the current image file
@@ -37,10 +37,14 @@ Selection:
     For “quadratic” shapes (i.e. square and circle), the height will
     follow the width. Minimum is 20 pixels in each dimension.
   "Center at x/y": Fine-tune the selection center here.
-  Show preview: |
+
+Show preview:
+  Preview pixelation: |
     Show or suppress the preview of the not-yet-applied pixelation.
     This might be useful if you are not sure whether you already applied
     the pixelation at the current position or not.
+    Switching off the preview will result in a quicker response
+    when you resize the selection using the muse wheel.
 
 Colours:
   Change these colours for better contrast with the image:

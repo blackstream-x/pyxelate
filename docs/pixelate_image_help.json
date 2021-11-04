@@ -1,7 +1,5 @@
 {
-  "Global": {
-    "pixelate_image.py": "This is a script for pixelating partial areas of images.\n\nDrag the selection around, resize it or create a new one.\n\nFine-tune selection size and position using the controls\nin the \u201cSelection\u201d section of the right hand panel.\nClick the \u201c\u2713 Apply\u201d button to apply the pixelation at the indicated\nposition, or \u201c\u238c Undo\u201d to undo the last applied pixelation.\n"
-  },
+  "select_area": "This is a script for pixelating partial areas of images.\n\nDrag the selection around, resize it or create a new one.\n\nFine-tune selection size and position using the controls\nin the \u201cSelection\u201d section of the right hand panel.\nClick the \u201c\u2713 Apply\u201d button or the right mouse button\nto apply the pixelation at the indicated position.\n\u201c\u238c Undo\u201d will undo the last applied pixelation.\n",
   "Original file": {
     "The first line": "shows the name of the current image file",
     "Choose another file": "When you click this button, you can load another image file.\n"
@@ -15,8 +13,10 @@
     "Tile size": "Change the size of the blurred tiles in intervals of 5 pixels.\nMinimum is 10 pixels, maximum 200 pixels.\n",
     "Shape": "Choose from elliptic or rectangular shapes.",
     "Width and Height": "Fine-tune selection width and height here.\nFor \u201cquadratic\u201d shapes (i.e. square and circle), the height will\nfollow the width. Minimum is 20 pixels in each dimension.\n",
-    "Center at x/y": "Fine-tune the selection center here.",
-    "Show preview": "Show or suppress the preview of the not-yet-applied pixelation.\nThis might be useful if you are not sure whether you already applied\nthe pixelation at the current position or not.\n"
+    "Center at x/y": "Fine-tune the selection center here."
+  },
+  "Show preview": {
+    "Preview pixelation": "Show or suppress the preview of the not-yet-applied pixelation.\nThis might be useful if you are not sure whether you already applied\nthe pixelation at the current position or not.\nSwitching off the preview will result in a quicker response\nwhen you resize the selection using the muse wheel.\n"
   },
   "Colours": {
     "Change these colours for better contrast with the image": null,

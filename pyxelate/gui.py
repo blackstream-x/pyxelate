@@ -206,39 +206,12 @@ class TransientProgressDisplay(TransientWindow):
         self.update_idletasks()
 
 
-class ModalDialog(TransientWindow):
+class TransientWindowWithButtons(TransientWindow):
 
-    """Modal dialog with "ok" and "cancel" buttons,
-    content is a sequence of (heading, body) strings.
-    Adapted from
-    <https://effbot.org/tkinterbook/tkinter-dialog-windows.htm>
+    """Modal window with "ok" and "cancel" buttons,
+    activated through the create_buttonbox(cancel_button=True|False)
+    method.
     """
-
-    def __init__(self, parent, content=None, title=None, cancel_button=True):
-        """Create the toplevel window and wait until the dialog is closed"""
-        super().__init__(parent, content=content, title=title)
-        self.create_buttonbox(cancel_button=cancel_button)
-        self.wait_window(self)
-
-    def create_content(self, content):
-        """Add content to body"""
-        for (heading, paragraph) in content:
-            Heading(
-                self.body,
-                text=heading,
-                justify=tkinter.LEFT,
-                sticky=tkinter.W,
-                padx=5,
-                pady=5,
-            )
-            if paragraph is None:
-                continue
-            #
-            text_widget = tkinter.Label(
-                self.body, text=paragraph.strip(), justify=tkinter.LEFT
-            )
-            text_widget.grid(sticky=tkinter.W, padx=5, pady=5)
-        #
 
     def create_buttonbox(self, cancel_button=True):
         """Add standard button box."""
@@ -260,8 +233,9 @@ class ModalDialog(TransientWindow):
         self.bind("<Return>", self.action_ok)
         box.grid(padx=5, pady=5, sticky=tkinter.E + tkinter.W)
 
-    #
-    # standard button semantics
+    def create_content(self, content):
+        """Add content to body -> overwrite in child classes"""
+        raise NotImplementedError
 
     def action_ok(self, event=None):
         """Clean up"""
@@ -271,7 +245,44 @@ class ModalDialog(TransientWindow):
         self.action_cancel()
 
 
-class InfoDialog(ModalDialog):
+class ModalDialog(TransientWindowWithButtons):
+
+    """Modal dialog with "ok" and "cancel" buttons,
+    content is a sequence of (heading, body) strings.
+    Adapted from
+    <https://effbot.org/tkinterbook/tkinter-dialog-windows.htm>
+    """
+
+    def __init__(self, parent, content=None, title=None, cancel_button=True):
+        """Create the toplevel window and wait until the dialog is closed"""
+        super().__init__(parent, content=content, title=title)
+        self.create_buttonbox(cancel_button=cancel_button)
+        self.wait_window(self)
+
+    def create_content(self, content):
+        """Add content to body"""
+        for (heading, paragraph) in content:
+            if heading:
+                Heading(
+                    self.body,
+                    text=heading,
+                    justify=tkinter.LEFT,
+                    sticky=tkinter.W,
+                    padx=5,
+                    pady=5,
+                )
+            #
+            if paragraph is None:
+                continue
+            #
+            text_widget = tkinter.Label(
+                self.body, text=paragraph.strip(), justify=tkinter.LEFT
+            )
+            text_widget.grid(sticky=tkinter.W, padx=5, pady=5)
+        #
+
+
+class InfoDialog(ModalDialog):  # pylint: disable=too-many-ancestors
 
     """Info dialog,
     instantiated with a series of (heading, paragraph) tuples

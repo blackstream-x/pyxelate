@@ -30,6 +30,6 @@ Please note that video length is limited to 10000 frames, that is roughly
 You can extend this limit up to a theoretical value of 999999 frames
 (9 hours and 15 minutes for NTSC or 11 hours and 6 minutes for PAL)
 by changing the `MAX_NB_FRAMES` variable in the script,
-if you have enough disk space and patience for editing that large videos.
+if you have enough disk space and patience for editing such large videos.
 
 _(to be continued)_

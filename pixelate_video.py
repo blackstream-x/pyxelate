@@ -92,14 +92,11 @@ PHASES = (
 )
 
 PANEL_NAMES = {
-    FIRST_FRAME: "Cut your video: select the beginning of the desired clip,"
-    " then right-click (or 'Next')",
-    LAST_FRAME: "Cut your video: select the end of the desired clip,"
-    " then right-click (or 'Next')",
-    START_AREA: "Pixelate a segment: select a start frame and area,"
-    " then right-click (or 'Add segment end')",
-    STOP_AREA: "Pixelate a segment: select an end frame and area,"
-    " then right-click for a connected segment",
+    FIRST_FRAME: "Cut your video: select the beginning of the desired clip",
+    LAST_FRAME: "Cut your video: select the end of the desired clip",
+    START_AREA: "Pixelate a segment: select a start frame and area",
+    STOP_AREA: "Pixelate a segment: select an end frame and area",
+    PREVIEW: "Preview the modified video frame by frame",
 }
 
 EMPTY_SELECTION = dict(
@@ -234,7 +231,6 @@ class Actions(core.InterfacePlugin):
 
     def last_frame(self):
         """Actions before showing "first frame" selection"""
-        self.application.adjust_current_frame(self.vars.kept_frames.end)
         self.application.adjust_frame_limits()
         self.vars.update(
             image=pixelations.BasePixelation(
@@ -339,12 +335,17 @@ class Callbacks(core.Callbacks):
             pathlib.Path(self.vars.original_frames.name) / self.vars.frame_file
         )
         if self.vars.current_panel == PREVIEW:
-            modified_path = (
-                pathlib.Path(self.vars.modified_frames.name)
-                / self.vars.frame_file
-            )
-            if modified_path.is_file():
-                frame_path = modified_path
+            try:
+                modified_frames_dir = self.vars.modified_frames.name
+            except AttributeError:
+                pass
+            else:
+                modified_path = (
+                    pathlib.Path(modified_frames_dir) / self.vars.frame_file
+                )
+                if modified_path.is_file():
+                    frame_path = modified_path
+                #
             #
         elif self.vars.current_panel in (START_AREA, STOP_AREA):
             image_type = pixelations.FramePixelation
@@ -492,9 +493,9 @@ class Panels(core.Panels):
         self.component_image_on_canvas()
         self.sidebar_frameselection()
 
-    def component_export_settings(self, sidebar_frame):
+    def component_export_settings(self, sidebar_frame, parent_window=None):
         """Section with the export settings"""
-        # Disabe "include audio" if the original video
+        # Disable "include audio" if the original video
         # has no audio stream
         if self.vars.has_audio:
             include_audio_state = tkinter.NORMAL
@@ -503,7 +504,7 @@ class Panels(core.Panels):
             include_audio_state = tkinter.DISABLED
         #
         self.application.heading_with_help_button(
-            sidebar_frame, "Export settings"
+            sidebar_frame, "Export settings", parent_window=parent_window
         )
         label = tkinter.Label(sidebar_frame, text="CRF:")
         crf = tkinter.Spinbox(
@@ -599,6 +600,7 @@ class Panels(core.Panels):
         )
         self.component_file_info(sidebar_frame)
         self.component_image_info(sidebar_frame)
+        self.component_show_preview(sidebar_frame, subject="before saving")
         sidebar_frame.columnconfigure(4, weight=100)
         sidebar_frame.grid(row=0, column=1, rowspan=2, **core.GRID_FULLWIDTH)
 
@@ -622,7 +624,13 @@ class Panels(core.Panels):
         )
         self.component_export_settings(sidebar_frame)
         sidebar_frame.columnconfigure(4, weight=100)
-        sidebar_frame.grid(row=2, column=1, **core.GRID_FULLWIDTH)
+        sidebar_frame.grid(
+            row=2,
+            column=1,
+            padx=4,
+            pady=2,
+            sticky=tkinter.E + tkinter.W + tkinter.S,
+        )
 
     # Panels in order of appearance
 
@@ -640,7 +648,7 @@ class Panels(core.Panels):
         the user select the area to be pixelated
         """
         self.component_image_on_canvas()
-        self.sidebar_settings()
+        self.sidebar_settings(preview_subject="pixelation / before saving")
 
     def stop_area(self):
         """Show the image on a canvas and let
@@ -652,7 +660,10 @@ class Panels(core.Panels):
             allowed_shapes = core.RECTANGULAR_SHAPES
         #
         self.component_image_on_canvas()
-        self.sidebar_settings(allowed_shapes=allowed_shapes)
+        self.sidebar_settings(
+            allowed_shapes=allowed_shapes,
+            preview_subject="pixelation / before saving",
+        )
 
     def preview(self):
         """Show a slider allowing to preview the modified video"""
@@ -673,11 +684,16 @@ class PostPanelActions(core.InterfacePlugin):
         )
 
     def last_frame(self):
-        """Cut after the last frame if required"""
-        self.vars.kept_frames.update(end=self.tkvars.current_frame.get())
-        self.application.cut_video(
-            from_=self.vars.kept_frames.end + 1,
-        )
+        """Cut after the last frame if required,
+        and if the last frame is greater than the first frame
+        """
+        current_frame = self.tkvars.current_frame.get()
+        if current_frame > self.vars.kept_frames.start:
+            self.vars.kept_frames.update(end=self.tkvars.current_frame.get())
+            self.application.cut_video(
+                from_=self.vars.kept_frames.end + 1,
+            )
+        #
 
     def start_area(self):
         """Append coordinates (current frame and selection)
@@ -739,16 +755,37 @@ class Rollbacks(core.InterfacePlugin):
         """
         self.vars.later_stations.append(self.application.get_coordinates())
         self.application.adjust_frame_limits()
-        self.application.apply_coordinates(self.vars.stations.pop())
-        # Set minimum frame to before-previous panel frame if possible
+        segment_end = self.vars.stations.pop()
+        self.application.apply_coordinates(segment_end)
+        # Set minimum frame to before-previous panel frame if possible.
+        # Clean up the modified_frames temporary directory.
         try:
-            start_frame = self.vars.stations[-1]["frame"]
-            frame_position = "Pixelation stop"
+            segment_start = self.vars.stations[-1]
         except IndexError:
             frame_position = "Pixelation start"
         else:
+            start_frame = segment_start["frame"]
+            frame_position = "Pixelation stop"
             self.application.adjust_frame_limits(minimum=start_frame)
+            # Remove modified frames of the last segment.
+            # If that was the only one, remove the modified
+            # first frame of that segment as well.
+            if len(self.vars.stations) > 1:
+                start_frame += 1
+            #
+            modified_frames_path = pathlib.Path(self.vars.modified_frames.name)
+            for frame_number in range(start_frame, segment_end["frame"] + 1):
+                frame_file = modified_frames_path / (
+                    pixelations.FRAME_PATTERN % frame_number
+                )
+                try:
+                    frame_file.unlink()
+                except FileNotFoundError:
+                    logging.warning("Frame# %s not found", frame_number)
+                #
+            #
         #
+        logging.debug("Frame position: {frame_position}")
         self.vars.update(
             frame_file=self.vars.frame_file,
             image=pixelations.FramePixelation(
@@ -764,11 +801,11 @@ class Rollbacks(core.InterfacePlugin):
         """Actions when clicking the "previous" button
         in the preview panel:
         same as in stop_area,
-        plus cleanup of the modified_frames directory
         and reset of the drag action
         """
-        self.stop_area()
-        self.vars.modified_frames.cleanup()
+        if self.vars.panel_stack[-1] in (START_AREA, STOP_AREA):
+            self.stop_area()
+        #
         self.tkvars.drag_action.set(self.vars.previous_drag_action)
 
 
@@ -814,6 +851,7 @@ class VideoUI(core.UserInterface):
             frame_file=None,
             frame_rate=None,
             frames_cache=None,
+            ffmpeg_loglevel="quiet",
             stations=[],
             later_stations=[],
             duration_usec=None,
@@ -821,6 +859,9 @@ class VideoUI(core.UserInterface):
             frame_limits=core.Namespace(minimum=1, maximum=1),
             kept_frames=core.Namespace(start=1, end=1),
         )
+        if self.options.loglevel == logging.DEBUG:
+            self.vars.update(ffmpeg_loglevel="error")
+        #
         self.tkvars.update(
             current_frame=self.callbacks.get_traced_intvar("change_frame"),
             current_frame_text=self.callbacks.get_traced_stringvar(
@@ -986,6 +1027,7 @@ class VideoUI(core.UserInterface):
                 ffprobe_executable=self.options.ffprobe_executable,
                 select_streams="a",
                 show_entries=ffmw.ENTRIES_ALL,
+                loglevel=self.vars.ffmpeg_loglevel,
             )
         )
         logging.debug("%r has audio: %r", file_path.name, has_audio)
@@ -999,6 +1041,7 @@ class VideoUI(core.UserInterface):
             file_path,
             ffprobe_executable=self.options.ffprobe_executable,
             select_streams="v",
+            loglevel=self.vars.ffmpeg_loglevel,
         )
         # Validate video properties,
         # especially nb_frames, duration and frame rates
@@ -1012,7 +1055,9 @@ class VideoUI(core.UserInterface):
         except ValueError as error:
             logging.warning(error)
             video_data = ffmw.count_all_frames(
-                file_path, ffmpeg_executable=self.options.ffmpeg_executable
+                file_path,
+                ffmpeg_executable=self.options.ffmpeg_executable,
+                loglevel=self.vars.ffmpeg_loglevel,
             )
             nb_frames = int(video_data["frame"])
             duration_usec = int(video_data["out_time_us"])
@@ -1118,13 +1163,23 @@ class VideoUI(core.UserInterface):
         return True if the file was saved
         """
         self.execute_post_panel_action()
+        if self.vars.current_panel != PREVIEW:
+            if self.tkvars.show_preview.get():
+                self.vars.panel_stack.append(self.vars.current_panel)
+                self.jump_to_panel(PREVIEW)
+                return False
+            #
+            self.__show_export_settings_dialog()
+        #
         original_suffix = self.vars.original_path.suffix
+        self.vars.update(disable_key_events=True)
         selected_file = filedialog.asksaveasfilename(
             initialdir=str(self.vars.original_path.parent),
             defaultextension=original_suffix,
             parent=self.main_window,
             title="Save pixelated video as…",
         )
+        self.vars.update(disable_key_events=False)
         if not selected_file:
             return False
         #
@@ -1169,10 +1224,8 @@ class VideoUI(core.UserInterface):
                         "copy",
                     ]
                 )
-                if (
-                    cut_at_start
-                    or self.vars.kept_frames.end < self.vars.nb_frames
-                ):
+                cut_at_end = self.vars.nb_frames - self.vars.kept_frames.end
+                if cut_at_start or cut_at_end:
                     arguments.append("-shortest")
                 #
             #
@@ -1205,7 +1258,9 @@ class VideoUI(core.UserInterface):
             save_exec = ffmw.FFmpegWrapper(
                 *arguments, executable=self.options.ffmpeg_executable
             )
-            save_exec.add_extra_arguments("-loglevel", "error")
+            save_exec.add_extra_arguments(
+                "-loglevel", self.vars.ffmpeg_loglevel
+            )
             try:
                 for line in save_exec.stream(check=True):
                     if line.startswith("frame="):
@@ -1234,6 +1289,7 @@ class VideoUI(core.UserInterface):
             cut_end=tkinter.DISABLED,
             add_route=tkinter.DISABLED,
             add_segment=tkinter.DISABLED,
+            back=tkinter.DISABLED,
             save=tkinter.NORMAL,
             save_and_exit=tkinter.NORMAL,
         )
@@ -1241,13 +1297,15 @@ class VideoUI(core.UserInterface):
             cut_end=self.next_panel,
             add_route=self.start_new_route,
             add_segment=self.next_panel,
+            back=self.previous_panel,
             save=self.save_file,
             save_and_exit=self.save_and_exit,
         )
         button_texts = dict(
             cut_end="Cut end",
-            add_route="Preview or add new route",
+            add_route="Add new route",
             add_segment="Add connected segment",
+            back="\u25c1 Back",
             save="Save",
             save_and_exit="Save and exit",
         )
@@ -1257,21 +1315,16 @@ class VideoUI(core.UserInterface):
                 add_route=tkinter.NORMAL,
             )
         elif self.vars.current_panel == LAST_FRAME:
-            buttonstates.update(
-                add_route=tkinter.NORMAL,
-            )
+            buttonstates.update(add_route=tkinter.NORMAL)
             commands.update(add_route=self.next_panel)
         elif self.vars.current_panel == START_AREA:
-            buttonstates.update(
-                add_segment=tkinter.NORMAL,
-                save=tkinter.DISABLED,
-                save_and_exit=tkinter.DISABLED,
-            )
+            buttonstates.update(add_segment=tkinter.NORMAL)
             button_texts.update(add_segment="Add segment end")
         elif self.vars.current_panel in (STOP_AREA, PREVIEW):
             buttonstates.update(
                 add_route=tkinter.NORMAL,
                 add_segment=tkinter.NORMAL,
+                back=tkinter.NORMAL,
             )
         #
         buttons = core.Namespace(
@@ -1290,6 +1343,7 @@ class VideoUI(core.UserInterface):
         buttons.add_route.grid(
             row=0, column=1, columnspan=2, **core.BUTTONS_GRID_W
         )
+        buttons.back.grid(row=1, column=0, **core.BUTTONS_GRID_E)
         buttons.add_segment.grid(
             row=1, column=1, columnspan=2, **core.BUTTONS_GRID_W
         )
@@ -1309,6 +1363,26 @@ class VideoUI(core.UserInterface):
         self.vars.update(trace=True)
         return 3
 
+    def __show_export_settings_dialog(self):
+        """Show export settings in a modal dialog and wait for the window"""
+        export_settings = gui.TransientWindowWithButtons(
+            self.main_window, title="Export settings"
+        )
+        self.panels.component_export_settings(
+            export_settings.body, parent_window=export_settings
+        )
+        export_settings.create_buttonbox(cancel_button=False)
+        self.main_window.wait_window(export_settings)
+
+    def show_image(self):
+        """Show image or preview according to the show_preview setting,
+        but only in the start_area or stop_area panels.
+        """
+        if self.vars.current_panel not in (START_AREA, STOP_AREA):
+            return
+        #
+        super().show_image()
+
     def __show_in_default_player(self, full_file_name):
         """If showing the video in the default player is possible,
         ask to do that (and do it after a positive answer).
@@ -1321,7 +1395,12 @@ class VideoUI(core.UserInterface):
             shell = True
         else:
             try:
-                subprocess.run((show_video_command, "--version"), check=True)
+                subprocess.run(
+                    (show_video_command, "--version"),
+                    stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    check=True,
+                )
             except subprocess.CalledProcessError:
                 return False
             #
@@ -1336,6 +1415,8 @@ class VideoUI(core.UserInterface):
             subprocess.run(
                 (show_video_command, full_file_name),
                 shell=shell,
+                stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
                 check=True,
             )
         #
@@ -1367,7 +1448,7 @@ class VideoUI(core.UserInterface):
             ),
             executable=self.options.ffmpeg_executable,
         )
-        split_exec.add_extra_arguments("-loglevel", "error")
+        split_exec.add_extra_arguments("-loglevel", self.vars.ffmpeg_loglevel)
         try:
             for line in split_exec.stream(check=True):
                 if line.startswith("frame="):
@@ -1412,6 +1493,7 @@ class VideoUI(core.UserInterface):
             self.vars.later_stations.append(self.get_coordinates())
         #
         # Directly jump to start_area
+        self.vars.panel_stack.append(self.vars.current_panel)
         self.jump_to_panel(START_AREA)
 
 

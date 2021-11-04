@@ -255,7 +255,7 @@ class ImageUI(core.UserInterface):
             buttons=core.Namespace(undo=None, apply=None, save=None)
         )
 
-    def apply_pixelation(self):
+    def apply_pixelation(self, *unused_event):
         """Apply changes to the image"""
         # Append the current state to the undo buffer
         self.vars.undo_buffer.append(
@@ -399,6 +399,7 @@ class ImageUI(core.UserInterface):
             ("Supported image files", f"*{suffix}")
             for suffix in self.vars.save_support
         ] + [("All files", "*.*")]
+        self.vars.update(disable_key_events=True)
         selected_file = filedialog.asksaveasfilename(
             initialdir=str(self.vars.original_path.parent),
             defaultextension=original_suffix,
@@ -406,6 +407,7 @@ class ImageUI(core.UserInterface):
             parent=self.main_window,
             title="Save pixelated image as…",
         )
+        self.vars.update(disable_key_events=False)
         if not selected_file:
             return False
         #
@@ -442,6 +444,8 @@ class ImageUI(core.UserInterface):
         self.widgets.buttons.undo.grid(row=0, column=0, **core.BUTTONS_GRID_E)
         self.widgets.buttons.apply.grid(row=0, column=1, **core.BUTTONS_GRID_W)
         self.widgets.buttons.save.grid(row=0, column=2, **core.BUTTONS_GRID_E)
+        # Enable right mouse click as shortcut for "Apply"
+        self.main_window.bind_all("<ButtonRelease-3>", self.apply_pixelation)
         return 1
 
 
