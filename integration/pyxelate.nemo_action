@@ -1,0 +1,9 @@
+[Nemo Action]
+Name=Pyxelate
+Name[de]=Pyxelate
+Comment[de]=Videos oder Bilder verpixeln
+Exec=/usr/local/src/pyxelate/pixelate.py %F
+Icon-Name=gtk-edit
+Selection=S
+Extensions=any;
+Quote=double
