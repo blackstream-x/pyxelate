@@ -9,7 +9,7 @@ Automatically select the correct script for pixelating
 an image or a video clip, based on the provided file's
 mime type.
 
-Directly supports Nautilus integration.
+Directly supports integration into the Nautilus and Nemo filemanagers.
 
 """
 
@@ -66,6 +66,7 @@ except OSError as error:
     VERSION = "(Version file is missing: %s)" % error
 
 NAUTILUS_SCRIPTS = pathlib.Path(".local/share/nautilus/scripts")
+NEMO_SCRIPTS = pathlib.Path(".local/share/nemo/scripts")
 
 RETURNCODE_OK = 0
 RETURNCODE_ERROR = 1
@@ -124,6 +125,58 @@ def install_nautilus_script(name):
     #
     os.symlink(SCRIPT_PATH, target_link_path)
     logging.info("Nautilus script has been installed as %r", name)
+    return RETURNCODE_OK
+
+
+
+def install_nemo_script(name):
+    """Install this script as a nemo script"""
+    target_directory = pathlib.Path.home() / NEMO_SCRIPTS
+    if not target_directory.is_dir():
+        if target_directory.parent.is_dir():
+            target_directory.mkdir()
+        else:
+            logging.error("Nemo probably not available.")
+            return RETURNCODE_ERROR
+        #
+    #
+    target_link_path = target_directory / name
+    logging.debug("Target link path: %s", target_link_path)
+    if target_link_path.exists():
+        logging.error("Nemo script %r already exists!", name)
+        return RETURNCODE_ERROR
+    #
+    for single_path in target_directory.glob("*"):
+        if single_path.is_symlink():
+            logging.debug("Found symlink: %s", single_path)
+            if single_path.readlink() == SCRIPT_PATH:
+                logging.warning(
+                    "Nemo script already installed as %r", single_path.name
+                )
+                answer = (
+                    input(f"Rename that to {name!r} (yes/no)? ").lower()
+                    or "no"
+                )
+                if "yes".startswith(answer):
+                    logging.info("Renaming %r to %r.", single_path.name, name)
+                    os.rename(single_path, target_link_path)
+                    return RETURNCODE_OK
+                #
+                if "no".startswith(answer):
+                    logging.info("Leaving everything as is.")
+                    return RETURNCODE_OK
+                #
+                logging.warning(
+                    "Interpreting %r as %r, leaving everything as is.",
+                    answer,
+                    "no",
+                )
+                return RETURNCODE_ERROR
+            #
+        #
+    #
+    os.symlink(SCRIPT_PATH, target_link_path)
+    logging.info("Nemo script has been installed as %r", name)
     return RETURNCODE_OK
 
 
@@ -197,6 +250,14 @@ def __get_arguments():
         " (default: %(const)s)",
     )
     argument_parser.add_argument(
+        "--install-nemo-script",
+        nargs="?",
+        metavar="NAME",
+        const="Pixelate",
+        help="Install this script as Nemo script %(metavar)s"
+        " (default: %(const)s)",
+    )
+    argument_parser.add_argument(
         "files", type=pathlib.Path, nargs=argparse.REMAINDER
     )
     return argument_parser.parse_args()
@@ -210,6 +271,10 @@ def main(arguments):
     if arguments.install_nautilus_script:
         return install_nautilus_script(arguments.install_nautilus_script)
     #
+    if arguments.install_nemo_script:
+        return install_nemo_script(arguments.install_nemo_script)
+    #
+
     try:
         selected_file = arguments.files[0]
     except IndexError:
