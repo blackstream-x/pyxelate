@@ -5,5 +5,5 @@ Comment[de]=Videos oder Bilder verpixeln
 Exec=/usr/local/src/pyxelate/pixelate.py %F
 Icon-Name=gtk-edit
 Selection=S
-Extensions=any;
+Extensions=mp4;mkv;webm;avi;jpg;jpeg;png;gif;webp;
 Quote=double
