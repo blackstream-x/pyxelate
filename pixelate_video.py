@@ -206,7 +206,7 @@ class TemporaryFramesPath(core.InterfacePlugin):
             original_name = self.source_file[file_path.name]
             file_path.rename(original_name)
         #
-        logging.debug("Moved files back to %s", original_name)
+        logging.debug("Moved files back to the original directories")
         self.temporary_storage.cleanup()
         logging.debug(
             "Deleted temporary directory %s", self.temporary_storage.name
