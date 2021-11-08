@@ -62,11 +62,19 @@ If not, see <http://www.gnu.org/licenses/>."""
 VERSION_PATH = SCRIPT_PATH.parent / "version.txt"
 try:
     VERSION = VERSION_PATH.read_text().strip()
-except OSError as error:
-    VERSION = "(Version file is missing: %s)" % error
+except OSError as os_error:
+    VERSION = f"(Version file is missing: {os_error})"
+#
 
-NAUTILUS_SCRIPTS = pathlib.Path(".local/share/nautilus/scripts")
-NEMO_SCRIPTS = pathlib.Path(".local/share/nemo/scripts")
+NAUTILUS = "Nautilus"
+NEMO = "Nemo"
+
+SCRIPT_DIRECTORIES = {
+    NAUTILUS: pathlib.Path(".local/share/nautilus/scripts"),
+    NEMO: pathlib.Path(".local/share/nemo/scripts"),
+}
+
+SUPPORTED_FILE_MANAGERS = (NAUTILUS, NEMO)
 
 RETURNCODE_OK = 0
 RETURNCODE_ERROR = 1
@@ -77,21 +85,51 @@ RETURNCODE_ERROR = 1
 #
 
 
-def install_nautilus_script(name):
-    """Install this script as a nautilus script"""
-    target_directory = pathlib.Path.home() / NAUTILUS_SCRIPTS
+def get_selected_path():
+    """Return the path of the first selected existing file
+    in any of the supported file managers.
+    Raise a ValueError if no such path was found.
+    """
+    for file_manager_name in SUPPORTED_FILE_MANAGERS:
+        try:
+            selected_names = os.environ[
+                f"{file_manager_name.upper()}_SCRIPT_SELECTED_FILE_PATHS"
+            ]
+        except KeyError:
+            continue
+        else:
+            for name in selected_names.splitlines():
+                if name:
+                    current_path = pathlib.Path(name)
+                    if current_path.is_file():
+                        return current_path
+                    #
+                #
+            #
+        #
+    #
+    raise ValueError("No existing file selected.")
+
+
+def install_file_manager_script(file_manager_name, display_name):
+    """Install this script as a file manager script"""
+    target_directory = (
+        pathlib.Path.home() / SCRIPT_DIRECTORIES[file_manager_name]
+    )
     if not target_directory.is_dir():
         if target_directory.parent.is_dir():
             target_directory.mkdir()
         else:
-            logging.error("Nautilus probably not available.")
+            logging.error("%s probably not available.", file_manager_name)
             return RETURNCODE_ERROR
         #
     #
-    target_link_path = target_directory / name
+    target_link_path = target_directory / display_name
     logging.debug("Target link path: %s", target_link_path)
     if target_link_path.exists():
-        logging.error("Nautilus script %r already exists!", name)
+        logging.error(
+            "%s script %r already exists!", file_manager_name, display_name
+        )
         return RETURNCODE_ERROR
     #
     for single_path in target_directory.glob("*"):
@@ -99,14 +137,20 @@ def install_nautilus_script(name):
             logging.debug("Found symlink: %s", single_path)
             if single_path.readlink() == SCRIPT_PATH:
                 logging.warning(
-                    "Nautilus script already installed as %r", single_path.name
+                    "%s script already installed as %r",
+                    file_manager_name,
+                    single_path.name,
                 )
                 answer = (
-                    input(f"Rename that to {name!r} (yes/no)? ").lower()
+                    input(
+                        f"Rename that to {display_name!r} (yes/no)? "
+                    ).lower()
                     or "no"
                 )
                 if "yes".startswith(answer):
-                    logging.info("Renaming %r to %r.", single_path.name, name)
+                    logging.info(
+                        "Renaming %r to %r.", single_path.name, display_name
+                    )
                     os.rename(single_path, target_link_path)
                     return RETURNCODE_OK
                 #
@@ -124,59 +168,9 @@ def install_nautilus_script(name):
         #
     #
     os.symlink(SCRIPT_PATH, target_link_path)
-    logging.info("Nautilus script has been installed as %r", name)
-    return RETURNCODE_OK
-
-
-
-def install_nemo_script(name):
-    """Install this script as a nemo script"""
-    target_directory = pathlib.Path.home() / NEMO_SCRIPTS
-    if not target_directory.is_dir():
-        if target_directory.parent.is_dir():
-            target_directory.mkdir()
-        else:
-            logging.error("Nemo probably not available.")
-            return RETURNCODE_ERROR
-        #
-    #
-    target_link_path = target_directory / name
-    logging.debug("Target link path: %s", target_link_path)
-    if target_link_path.exists():
-        logging.error("Nemo script %r already exists!", name)
-        return RETURNCODE_ERROR
-    #
-    for single_path in target_directory.glob("*"):
-        if single_path.is_symlink():
-            logging.debug("Found symlink: %s", single_path)
-            if single_path.readlink() == SCRIPT_PATH:
-                logging.warning(
-                    "Nemo script already installed as %r", single_path.name
-                )
-                answer = (
-                    input(f"Rename that to {name!r} (yes/no)? ").lower()
-                    or "no"
-                )
-                if "yes".startswith(answer):
-                    logging.info("Renaming %r to %r.", single_path.name, name)
-                    os.rename(single_path, target_link_path)
-                    return RETURNCODE_OK
-                #
-                if "no".startswith(answer):
-                    logging.info("Leaving everything as is.")
-                    return RETURNCODE_OK
-                #
-                logging.warning(
-                    "Interpreting %r as %r, leaving everything as is.",
-                    answer,
-                    "no",
-                )
-                return RETURNCODE_ERROR
-            #
-        #
-    #
-    os.symlink(SCRIPT_PATH, target_link_path)
-    logging.info("Nemo script has been installed as %r", name)
+    logging.info(
+        "%s script has been installed as %r", file_manager_name, display_name
+    )
     return RETURNCODE_OK
 
 
@@ -269,12 +263,13 @@ def main(arguments):
         format="%(levelname)-8s\u2551 %(message)s", level=arguments.loglevel
     )
     if arguments.install_nautilus_script:
-        return install_nautilus_script(arguments.install_nautilus_script)
+        return install_file_manager_script(
+            NAUTILUS, arguments.install_nautilus_script
+        )
     #
     if arguments.install_nemo_script:
-        return install_nemo_script(arguments.install_nemo_script)
+        return install_file_manager_script(NEMO, arguments.install_nemo_script)
     #
-
     try:
         selected_file = arguments.files[0]
     except IndexError:
@@ -285,19 +280,9 @@ def main(arguments):
         #
     #
     try:
-        selected_names = os.environ["NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"]
-    except KeyError:
+        selected_file = get_selected_path()
+    except ValueError:
         pass
-    else:
-        for name in selected_names.splitlines():
-            if name:
-                current_path = pathlib.Path(name)
-                if current_path.is_file():
-                    selected_file = current_path
-                    break
-                #
-            #
-        #
     #
     if selected_file:
         return start_matching_script(selected_file)
