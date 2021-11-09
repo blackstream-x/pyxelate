@@ -336,8 +336,8 @@ class ImageUI(core.UserInterface):
             )
         )
         self.set_default_selection()
-        # set the show_preview variable by default
-        self.tkvars.show_preview.set(1)
+        # set the show_preview variable to the user setting
+        self.tkvars.show_preview.set(self.vars.user_settings.show_preview)
         # set the original path and displayed file name
         self.vars.update(original_path=file_path, unapplied_changes=False)
         self.tkvars.file_name.set(file_path.name)

@@ -66,7 +66,6 @@ RECTANGULAR_SHAPES = (RECT, SQUARE)
 QUADRATIC_SHAPES = (CIRCLE, SQUARE)
 ALL_SHAPES = ELLIPTIC_SHAPES + RECTANGULAR_SHAPES
 
-DEFAULT_TILESIZE = 25
 MINIMUM_TILESIZE = 10
 MAXIMUM_TILESIZE = 200
 TILESIZE_INCREMENT = 5
@@ -114,6 +113,13 @@ BUTTONS_GRID_W = dict(padx=3, pady=3, sticky=tkinter.W)
 BUTTONS_GRID_E = dict(padx=3, pady=3, sticky=tkinter.E)
 GRID_FULLWIDTH = dict(padx=4, pady=2, sticky=tkinter.E + tkinter.W)
 WITH_BORDER = dict(borderwidth=2, padx=5, pady=5, relief=tkinter.GROOVE)
+
+DEFAULT_SETTINGS = dict(
+    shape=CIRCLE,
+    show_preview=1,
+    indicator_color="red",
+    rubberband_color="blue",
+)
 
 
 #
@@ -947,6 +953,104 @@ class Panels(InterfacePlugin):
         self.application.toggle_height()
 
 
+class Validator(InterfacePlugin):
+
+    """Validator class for checking untrusted user settings"""
+
+    def __init__(self, application):
+        """Initialize results dict"""
+        super().__init__(application)
+        self.results = dict(application.default_settings)
+
+    def validate(self, settings_map):
+        """Validate values from the settings map"""
+        for (key, value) in settings_map.items():
+            if key not in self.results:
+                logging.error("Ignored unsupported user setting %r", key)
+                continue
+            #
+            try:
+                checked = getattr(self, f"checked_{key}")
+            except AttributeError as error:
+                logging.critical(
+                    "Found a bug: %s - please file an issue!", error
+                )
+            try:
+                value = checked(value)
+            except ValueError as error:
+                logging.error(
+                    "Ignored invalid user setting for %r: %r (%s)",
+                    key,
+                    value,
+                    error,
+                )
+                continue
+            #
+            logging.debug("Read user setting %s: %r", key, value)
+            self.results[key] = value
+            #
+        #
+
+    @staticmethod
+    def must_be_in_collection(value, collection, message):
+        """Raise a ValueError if the value is not in the collection"""
+        if value not in collection:
+            raise ValueError(message)
+        #
+
+    def checked_indicator_color(self, color):
+        """Check for a valid color"""
+        self.must_be_in_collection(color, POSSIBLE_INDICATOR_COLORS, "Unknown color")
+        return color
+
+    checked_rubberband_color = checked_indicator_color
+
+    def checked_shape(self, shape):
+        """Check for a valid shape"""
+        self.must_be_in_collection(shape, SHAPES, "Unknown shape")
+        return shape
+
+    def checked_show_preview(self, show_preview):
+        """Check for 0 or 1"""
+        if show_preview not in (0, 1):
+            raise ValueError("Must be 0 or 1")
+        #
+        return show_preview
+
+    @staticmethod
+    def checked_tilesize(tilesize):
+        """Fit tilesize into minimum, maximum and interval"""
+        if not isinstance(tilesize, int):
+            raise ValueError("Wrong type, must be an integer")
+        #
+        if tilesize < MINIMUM_TILESIZE:
+            logging.warning(
+                "Adjusted tilesize to minimum (%s)", MINIMUM_TILESIZE
+            )
+            return MINIMUM_TILESIZE
+        #
+        if tilesize > MAXIMUM_TILESIZE:
+            logging.warning(
+                "Adjusted tilesize to maximum (%s)", MAXIMUM_TILESIZE
+            )
+            return MAXIMUM_TILESIZE
+        #
+        (factor, remainder) = divmod(
+            tilesize - MINIMUM_TILESIZE, TILESIZE_INCREMENT
+        )
+        if remainder:
+            tilesize = MINIMUM_TILESIZE + TILESIZE_INCREMENT * (
+                factor + round(remainder / TILESIZE_INCREMENT)
+            )
+            logging.warning(
+                "Rounded tilesize to %s to match the increment (%s)",
+                tilesize,
+                TILESIZE_INCREMENT,
+            )
+        #
+        return tilesize
+
+
 class UserInterface:
 
     """GUI using tkinter (base class for pyxelate)"""
@@ -961,6 +1065,9 @@ class UserInterface:
     panel_class = Panels
     post_panel_action_class = InterfacePlugin
     rollback_class = InterfacePlugin
+    validator_class = Validator
+
+    default_settings = dict(tilesize=25, **DEFAULT_SETTINGS)
 
     script_name = "<module pyxelate.app>"
     version = "<version>"
@@ -986,6 +1093,8 @@ class UserInterface:
             errors=[],
             panel_stack=[],
             post_panel_methods={},
+            user_settings=Namespace(),
+            settings_path=None,
             canvas_width=canvas_width,
             canvas_height=canvas_height,
             tk_image=None,
@@ -1015,7 +1124,33 @@ class UserInterface:
         self.panels = self.panel_class(self)
         self.post_panel_actions = self.post_panel_action_class(self)
         self.rollbacks = self.rollback_class(self)
-        # Fill self.tkvars after the callbaks plugin has been initialized
+        #
+        # Load help file
+        with open(
+            script_path.parent / "docs" / f"{script_path.stem}_help.json",
+            mode="rt",
+            encoding="utf-8",
+        ) as help_file:
+            self.vars.update(help=json.load(help_file))
+        #
+        # Load user settings if the file exists
+        validator = self.validator_class(self)
+        self.vars.update(
+            settings_path=pathlib.Path(
+                script_path.parent / "settings" / f"{script_path.stem}.json"
+            )
+        )
+        try:
+            with open(
+                self.vars.settings_path, mode="rt", encoding="utf-8"
+            ) as settings_file:
+                validator.validate(json.load(settings_file))
+            #
+        except FileNotFoundError:
+            pass
+        #
+        self.vars.user_settings.update(**validator.results)
+        # Fill self.tkvars after the callbacks plugin has been initialized
         self.tkvars.update(
             file_name=tkinter.StringVar(),
             show_preview=tkinter.IntVar(),
@@ -1033,7 +1168,8 @@ class UserInterface:
             # each time the outline color is changed
             indicator=Namespace(
                 color=self.callbacks.get_traced_stringvar(
-                    "redraw_indicator", value="red"
+                    "redraw_indicator",
+                    value=self.vars.user_settings.indicator_color,
                 ),
                 drag_color=tkinter.StringVar(),
             ),
@@ -1044,18 +1180,11 @@ class UserInterface:
                 "set_canvas_cursor", value=MOVE_SELECTION
             ),
         )
-        self.tkvars.indicator.drag_color.set("blue")
+        self.tkvars.indicator.drag_color.set(
+            self.vars.user_settings.rubberband_color
+        )
         self.additional_variables()
         self.additional_widgets()
-        #
-        # Load help file
-        with open(
-            script_path.parent / "docs" / f"{script_path.stem}_help.json",
-            mode="rt",
-            encoding="utf-8",
-        ) as help_file:
-            self.vars.help = json.load(help_file)
-        #
         self.open_file(keep_existing=True, quit_on_empty_choice=True)
         self.main_window.protocol("WM_DELETE_WINDOW", self.quit)
         self.main_window.mainloop()
@@ -1271,9 +1400,9 @@ class UserInterface:
         """
         raise NotImplementedError
 
-    def set_default_selection(self, tilesize=DEFAULT_TILESIZE):
+    def set_default_selection(self, tilesize=None):
         """Set default selection parameters from the following:
-        shape: oval,
+        shape: circle,
         width: 20% of the image width,
         height: same as width,
         position: image center
@@ -1290,13 +1419,22 @@ class UserInterface:
         #
         center_x = self.tkvars.selection.center_x.get() or im_width // 2
         center_y = self.tkvars.selection.center_y.get() or im_height // 2
+        shape = (
+            self.tkvars.selection.shape.get()
+            or self.vars.user_settings.shape
+        )
+        tilesize = (
+            self.tkvars.selection.tilesize.get()
+            or tilesize
+            or self.vars.user_settings.tilesize
+        )
         self.update_selection(
             center_x=center_x,
             center_y=center_y,
             width=min(sel_width, im_width),
             height=min(sel_height, im_height),
-            shape=self.tkvars.selection.shape.get() or CIRCLE,
-            tilesize=self.tkvars.selection.tilesize.get() or tilesize,
+            shape=shape,
+            tilesize=tilesize,
         )
 
     def show_image(self):
@@ -1398,8 +1536,39 @@ class UserInterface:
         raise NotImplementedError
 
     def quit(self, event=None):
-        """Exit the application"""
+        """Save user settings and exit the application"""
         del event
+        self.vars.user_settings.update(
+            indicator_color=self.tkvars.indicator.color.get(),
+            rubberband_color=self.tkvars.indicator.drag_color.get(),
+            shape=self.tkvars.selection.shape.get(),
+            show_preview=self.tkvars.show_preview.get(),
+            tilesize=self.tkvars.selection.tilesize.get(),
+        )
+        try:
+            if not self.vars.settings_path.parent.is_dir():
+                self.vars.settings_path.parent.mkdir()
+            #
+        except (FileExistsError, FileNotFoundError) as error:
+            messagebox.showerror(
+                "Saving preferences failed",
+                f"Could not save preferences: {error}",
+                parent=self.main_window,
+                icon=messagebox.ERROR)
+        else:
+            with open(
+                self.vars.settings_path,
+                mode="wt",
+                encoding="utf-8",
+            ) as settings_file:
+                json.dump(
+                    self.vars.user_settings,
+                    settings_file,
+                    indent=2,
+                    sort_keys=True,
+                )
+            #
+        #
         if self.pre_quit_check():
             self.main_window.destroy()
         #

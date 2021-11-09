@@ -131,3 +131,6 @@ dmypy.json
 # Local test data directory
 testdata/
 
+# Local settings directory
+settings/
+
