@@ -162,9 +162,8 @@ def most_frequent_color(image):
     #
     if not isinstance(selected_color, tuple):
         raise ValueError(
-            "Cannot handle color value {0!r} in image mode {1!r}.".format(
-                selected_color, image.mode
-            )
+            f"Cannot handle color value {selected_color!r}"
+            f" in image mode {image.mode!r}."
         )
     #
     return selected_color
@@ -255,7 +254,7 @@ class ShapesCache:
             draw.ellipse(dimensions, fill=255)
             shape_image = shape_image.filter(ImageFilter.GaussianBlur())
         else:
-            raise ValueError("Unsupported shape %r!" % shape_type)
+            raise ValueError(f"Unsupported shape {shape_type!r}!")
         #
         self.__shapes[key] = shape_image
         self.__last_access[key] = time.time()
@@ -355,7 +354,7 @@ class BaseImage:
         # Validation
         for (lower_side, upper_side) in (("left", "right"), ("top", "bottom")):
             if sizes[upper_side] < sizes[lower_side]:
-                message = "Cannot set crop area %r!" % sizes
+                message = "Cannot set crop area {sizes!r}!"
                 self.remove_crop_area()
                 raise ValueError(message)
             #
@@ -659,8 +658,8 @@ class MultiFramePixelation:
         self.target_path = target_path
         self.file_name_pattern = file_name_pattern
         self.quality = quality
-        self.start = dict()
-        self.gradients = dict()
+        self.start = {}
+        self.gradients = {}
 
     def get_intermediate_value(self, item, offset):
         """Get the intermediate value
@@ -776,7 +775,7 @@ class MultiFramePixelation:
             raise ValueError("The end frame must be after the start frame!")
         #
         self.start = start
-        self.gradients = dict()
+        self.gradients = {}
         for item in ("center_x", "center_y", "width", "height"):
             self.gradients[item] = Fraction(
                 end[item] - start[item], frames_diff

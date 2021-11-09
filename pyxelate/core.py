@@ -365,7 +365,7 @@ class Callbacks(InterfacePlugin):
         reading the drag_action variable
         """
         prefix = self.drag_registry[self.tkvars.drag_action.get()]
-        method = getattr(self, "%s_drag_%s" % (prefix, event_type))
+        method = getattr(self, f"{prefix}_drag_{event_type}")
         return method(event)
 
     def move_sel_drag_move(self, event):
@@ -913,7 +913,7 @@ class Panels(InterfacePlugin):
             percentage = int(percentage)
         #
         if display_ratio > 1:
-            zoom_factor = "%s%% (1:%s)" % (percentage, factor)
+            zoom_factor = f"{percentage}% (1:{factor})"
         else:
             zoom_factor = "100% (1:1)"
         #
@@ -1050,7 +1050,9 @@ class UserInterface:
         #
         # Load help file
         with open(
-            script_path.parent / "docs" / f"{script_path.stem}_help.json"
+            script_path.parent / "docs" / f"{script_path.stem}_help.json",
+            mode="rt",
+            encoding="utf-8",
         ) as help_file:
             self.vars.help = json.load(help_file)
         #
@@ -1472,9 +1474,9 @@ class UserInterface:
             panel_method = getattr(self.panels, self.vars.current_phase)
         except AttributeError:
             self.vars.errors.append(
-                "Panel for Phase %r has not been implemented yet,"
-                " going back to phase %r."
-                % (self.vars.current_phase, self.vars.current_panel)
+                f"Panel for Phase {self.vars.current_phase!r}"
+                " has not been implemented yet,"
+                f" going back to phase {self.vars.current_panel!r}."
             )
             self.vars.update(current_phase=self.vars.current_panel)
             panel_method = getattr(self.panels, self.vars.current_phase)

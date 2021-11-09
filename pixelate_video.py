@@ -70,8 +70,8 @@ If not, see <http://www.gnu.org/licenses/>."""
 VERSION_PATH = SCRIPT_PATH.parent / "version.txt"
 try:
     VERSION = VERSION_PATH.read_text().strip()
-except OSError as error:
-    VERSION = "(Version file is missing: %s)" % error
+except OSError as os_error:
+    VERSION = f"(Version file is missing: {os_error})"
 #
 
 # Phases
@@ -188,8 +188,8 @@ class TemporaryFramesPath(core.InterfacePlugin):
                 #
             else:
                 raise ValueError(
-                    "File %r found neither in modified nor in original frames!"
-                    % old_file_name
+                    f"File {old_file_name!r} found neither in modified"
+                    " nor in original frames!"
                 )
             #
             new_number += 1
@@ -206,7 +206,7 @@ class TemporaryFramesPath(core.InterfacePlugin):
             original_name = self.source_file[file_path.name]
             file_path.rename(original_name)
         #
-        logging.debug("Moved files back to %s", original_name)
+        logging.debug("Moved files back to the original directories")
         self.temporary_storage.cleanup()
         logging.debug(
             "Deleted temporary directory %s", self.temporary_storage.name
@@ -1230,13 +1230,12 @@ class VideoUI(core.UserInterface):
                 #
             #
             if self.tkvars.crop.get():
-                width = self.vars.crop_area.right - self.vars.crop_area.left
-                height = self.vars.crop_area.bottom - self.vars.crop_area.top
-                crop_filter = "crop=w=%s:h=%s:x=%s:y=%s," % (
-                    width,
-                    height,
-                    self.vars.crop_area.left,
-                    self.vars.crop_area.top,
+                crop_area = self.vars.crop_area
+                width = crop_area.right - crop_area.left
+                height = crop_area.bottom - crop_area.top
+                crop_filter = (
+                    f"crop=w={width}:h={height}:"
+                    f"x={crop_area.left}:y={crop_area.top},"
                 )
             else:
                 crop_filter = ""

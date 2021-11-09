@@ -65,8 +65,8 @@ If not, see <http://www.gnu.org/licenses/>."""
 VERSION_PATH = SCRIPT_PATH.parent / "version.txt"
 try:
     VERSION = VERSION_PATH.read_text().strip()
-except OSError as error:
-    VERSION = "(Version file is missing: %s)" % error
+except OSError as os_error:
+    VERSION = f"(Version file is missing: {os_error})"
 #
 
 # Phases and panel names
