@@ -4,21 +4,39 @@ The **pixelate.py** script can be integrated with some file managers
 to call the pixelation scripts using one or two clicks in the
 context menu after selecting a file.
 
-## Nautilus (GNOME)
+## Nautilus / Nemo (GNOME) script
 
-Install Nautilus script integration:
+Install Nautilus script:
 
 ```
-pixelate.py --install-nautilus-script
+pixelate.py --install-nautilus-script [ Name ]
 ```
 
-This will install **pixelate.py** as a Nautilus script
+Install Nemo script:
+
+```
+pixelate.py --install-nemo-script [ Name ]
+```
+
+This will install **pixelate.py** as a script for the selected file manager
 (located in the "Scripts" submenu ot the context menu.
 
-If you provide a name after `--install-nautilus-script`, the script will be
-installed with that name, otherwise as `Pixelate`.
+`Name` defaults to `Pyxelate`.
 
-## Thunar (XFCE)
+## Nemo (GNOME) action
+
+Install Nautilus action:
+
+```
+pixelate.py --install-nemo-action [ Name [ Comment ] ]
+```
+
+This will install **pixelate.py** as a Nemo action.
+
+`Name` defaults to `Pyxelate`,
+`Comment` to `"pixelate images or video sequences"`.
+
+## Thunar (XFCE) custom action
 
 Add the command `pixelate.py %f`
 (with its full path as printed by `readlink -f`)
@@ -27,7 +45,7 @@ to Thunar using a custom action as documented in
 
 Select "Image files" and "Video files" on the "Appearance Conditions" tab.
 
-## Windows Explorer
+## Windows Explorer (send to …)
 
 Create a new `.cmd` file containing the following:
 
