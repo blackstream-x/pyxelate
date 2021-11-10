@@ -4,7 +4,7 @@ The **pixelate.py** script can be integrated with some file managers
 to call the pixelation scripts using one or two clicks in the
 context menu after selecting a file.
 
-## Nautilus / Nemo (GNOME) script
+## Nautilus (GNOME) / Nemo (Cinnamon) script
 
 Install Nautilus script:
 
@@ -23,9 +23,9 @@ This will install **pixelate.py** as a script for the selected file manager
 
 `Name` defaults to `Pyxelate`.
 
-## Nemo (GNOME) action
+## Nemo (Cinnamon) action
 
-Install Nautilus action:
+Install Nemo action:
 
 ```
 pixelate.py --install-nemo-action [ Name [ Comment ] ]
