@@ -22,11 +22,8 @@ import pathlib
 import string
 import subprocess
 import sys
-import tkinter
 
 from tkinter import messagebox
-
-from pyxelate import gui
 
 
 #
@@ -119,6 +116,11 @@ def get_selected_path():
                 #
             #
         #
+        # TODO: The environment variable exists, but
+        # none of the paths in it is a valid file.
+        # This situation should lead to the opening
+        # of a file selection window and a subsequent
+        # break statement
     #
     raise ValueError("No existing file selected.")
 
@@ -188,14 +190,12 @@ def install_file_manager_script(file_manager_name, display_name):
 
 def install_nemo_action(arguments):
     """Install this script as a nemo action"""
-    target_directory = (
-        pathlib.Path.home() / NEMO_ACTIONS_DIRECTORY
-    )
+    target_directory = pathlib.Path.home() / NEMO_ACTIONS_DIRECTORY
     if not target_directory.is_dir():
         if target_directory.parent.is_dir():
             target_directory.mkdir()
         else:
-            logging.error("Nemo is probably not installed.",)
+            logging.error("Nemo is probably not installed.")
             return RETURNCODE_ERROR
         #
     #
@@ -232,6 +232,11 @@ def install_nemo_action(arguments):
 
 def start_matching_script(file_path):
     """Start the script suitable for the given file path"""
+    # TODO: implement a loop,
+    # showing a file selection dialog if the file type is neither
+    # image or video.
+    # The RETURNCODE_ERROR should only be returned
+    # if the file selection dialog was exited without selecting a file.
     file_type = mimetypes.guess_type(str(file_path))[0]
     matching_script = None
     if file_type:
@@ -291,7 +296,8 @@ def __get_argument_parser():
         dest="loglevel",
         help="Limit message output to warnings and errors",
     )
-    argument_parser.add_argument(
+    mutex_group = argument_parser.add_mutually_exclusive_group()
+    mutex_group.add_argument(
         "--install-nautilus-script",
         nargs="?",
         metavar="NAME",
@@ -299,7 +305,7 @@ def __get_argument_parser():
         help="Install this script as Nautilus script %(metavar)s"
         " (default: %(const)s)",
     )
-    argument_parser.add_argument(
+    mutex_group.add_argument(
         "--install-nemo-script",
         nargs="?",
         metavar="NAME",
@@ -307,7 +313,7 @@ def __get_argument_parser():
         help="Install this script as Nemo script %(metavar)s"
         " (default: %(const)s)",
     )
-    argument_parser.add_argument(
+    mutex_group.add_argument(
         "--install-nemo-action",
         nargs="*",
         metavar="ARG",
@@ -318,8 +324,11 @@ def __get_argument_parser():
         " it is used as comment for the action, else"
         f" {DEFAULT_ACTION_COMMENT!r} will be used.",
     )
-    argument_parser.add_argument(
-        "files", type=pathlib.Path, nargs=argparse.REMAINDER
+    mutex_group.add_argument(
+        "file",
+        type=pathlib.Path,
+        nargs="?",
+        help="The image or video file to pixelate",
     )
     return argument_parser
 
@@ -342,14 +351,9 @@ def main():
     if arguments.install_nemo_action is not None:
         return install_nemo_action(arguments)
     #
-    try:
-        selected_file = arguments.files[0]
-    except IndexError:
+    selected_file = arguments.file
+    if selected_file and not selected_file.is_file():
         selected_file = None
-    else:
-        if not selected_file.is_file():
-            selected_file = None
-        #
     #
     try:
         selected_file = get_selected_path()
@@ -359,13 +363,11 @@ def main():
     if selected_file:
         return start_matching_script(selected_file)
     #
-    toplevel = tkinter.Tk()
-    gui.InfoDialog(
-        toplevel,
-        ('Usage:', argument_parser.format_help()),
-        title='No file selected',
+    logging.error(
+        "Please specify either one of the install options"
+        " or an image or video file to pixelate.\n"
     )
-    toplevel.destroy()
+    argument_parser.print_help()
     return RETURNCODE_ERROR
 
 
