@@ -363,10 +363,6 @@ def main():
     if selected_file:
         return start_matching_script(selected_file)
     #
-    logging.error(
-        "Please specify either one of the install options"
-        " or an image or video file to pixelate.\n"
-    )
     argument_parser.print_help()
     return RETURNCODE_ERROR
 
