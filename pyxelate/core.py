@@ -917,6 +917,8 @@ class Panels(InterfacePlugin):
         percentage = round(100 / display_ratio, 2)
         if percentage == int(percentage):
             percentage = int(percentage)
+        else:
+            percentage = float(percentage)
         #
         if display_ratio > 1:
             zoom_factor = f"{percentage}% (1:{factor})"
