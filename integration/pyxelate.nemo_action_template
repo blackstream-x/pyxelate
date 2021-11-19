@@ -1,0 +1,8 @@
+[Nemo Action]
+Name=${name}
+Comment=${comment}
+Exec=${exec} %F
+Icon-Name=gtk-edit
+Selection=S
+Extensions=mp4;mkv;webm;avi;jpg;jpeg;png;gif;webp;
+Quote=double
