@@ -1767,4 +1767,27 @@ class UserInterface:
         self.vars.update(trace=True)
 
 
+#
+# Helper functions
+#
+
+
+def shortened_file_name(file_name, threshold=45):
+    """Return file_name shortened
+    by replacing characters in its middle by dots
+    if its length exceeds threshold,
+    or unchanged in the other case
+    """
+    if len(file_name) <= threshold:
+        return file_name
+    #
+    maximum_part_length = int((threshold - 3) / 2)
+    return "[…]".join(
+        (
+            file_name[:maximum_part_length],
+            file_name[-maximum_part_length:],
+        )
+    )
+
+
 # vim: fileencoding=utf-8 ts=4 sts=4 sw=4 autoindent expandtab syntax=python:

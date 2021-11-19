@@ -340,7 +340,7 @@ class ImageUI(core.UserInterface):
         self.tkvars.show_preview.set(self.vars.user_settings.show_preview)
         # set the original path and displayed file name
         self.vars.update(original_path=file_path, unapplied_changes=False)
-        self.tkvars.file_name.set(file_path.name)
+        self.tkvars.file_name.set(core.shortened_file_name(file_path.name))
         self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
         self.tkvars.buttonstate.save.set(tkinter.DISABLED)
 
@@ -415,7 +415,9 @@ class ImageUI(core.UserInterface):
         #  save the file and reset the "touched" flag
         self.vars.image.cropped_original.save(selected_file)
         self.vars.original_path = pathlib.Path(selected_file)
-        self.tkvars.file_name.set(self.vars.original_path.name)
+        self.tkvars.file_name.set(
+            core.shortened_file_name(self.vars.original_path.name)
+        )
         self.vars.undo_buffer.clear()
         self.tkvars.buttonstate.apply.set(tkinter.DISABLED)
         self.tkvars.buttonstate.save.set(tkinter.DISABLED)

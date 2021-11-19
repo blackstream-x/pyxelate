@@ -1527,7 +1527,7 @@ class VideoUI(core.UserInterface):
         self.vars.kept_frames.update(start=1, end=self.vars.nb_frames)
         self.vars.stations.clear()
         self.vars.later_stations.clear()
-        self.tkvars.file_name.set(file_path.name)
+        self.tkvars.file_name.set(core.shortened_file_name(file_path.name))
         self.tkvars.current_frame.set(1)
 
     def start_new_route(self):
