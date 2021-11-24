@@ -1,0 +1,8 @@
+{
+  "name": "Pyxelate",
+  "comment": "pixelate images or videos",
+  "relative_path": "pixelate.py",
+  "extensions": "mp4;mkv;webm;avi;jpg;jpeg;png;gif;webp",
+  "mimetypes": "image/*;video/*",
+  "identifier": "pyxelate"
+}
