@@ -112,8 +112,8 @@ MAX_NB_FRAMES = 10000
 
 ONE_MILLION = 1000000
 
-DEFAULT_EXPORT_CRF = 18
-DEFAULT_EXPORT_PRESET = "ultrafast"
+# DEFAULT_EXPORT_CRF = 18
+# DEFAULT_EXPORT_PRESET = "ultrafast"
 
 EXPORT_PRESETS = (
     "ultrafast",
@@ -130,7 +130,7 @@ EXPORT_PRESETS = (
 CANVAS_WIDTH = 720
 CANVAS_HEIGHT = 540
 
-DEFAULT_TILESIZE = 10
+# DEFAULT_TILESIZE = 10
 
 
 #
@@ -221,19 +221,24 @@ class Actions(core.InterfacePlugin):
         """Actions before showing "first frame" selection"""
         self.application.adjust_frame_limits()
         self.vars.update(
-            image=pixelations.BasePixelation(
+            image=pixelations.BaseImage(
                 pathlib.Path(self.vars.original_frames.name)
                 / self.vars.frame_file,
                 canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
             ),
             frame_position="Select first video",
         )
+        # set the show_preview variable to the user setting
+        self.tkvars.show_preview.set(self.vars.user_settings.show_preview)
+        self.application.set_default_selection(
+            tilesize=self.vars.user_settings.tilesize
+        )
 
     def last_frame(self):
         """Actions before showing "first frame" selection"""
         self.application.adjust_frame_limits()
         self.vars.update(
-            image=pixelations.BasePixelation(
+            image=pixelations.BaseImage(
                 pathlib.Path(self.vars.original_frames.name)
                 / self.vars.frame_file,
                 canvas_size=(self.vars.canvas_width, self.vars.canvas_height),
@@ -261,11 +266,8 @@ class Actions(core.InterfacePlugin):
             self.application.apply_coordinates(self.vars.later_stations.pop())
         except IndexError:
             self.application.adjust_current_frame(self.vars.kept_frames.start)
-            self.application.set_default_selection(tilesize=DEFAULT_TILESIZE)
         #
         self.tkvars.drag_action.set(self.vars.previous_drag_action)
-        # set the show_preview variable by default
-        self.tkvars.show_preview.set(1)
 
     def stop_area(self):
         """Actions before showing the stop area selection panel:
@@ -392,6 +394,22 @@ class Callbacks(core.Callbacks):
         current_frame = self.tkvars.current_frame.get()
         self.application.adjust_current_frame(current_frame + 1)
         self.change_frame()
+
+    def set_export_preferences(self, *unused_arguments):
+        """Set the export_crf and export_preset user preferences
+        from the tkvars"""
+        self.vars.user_settings.update(
+            export_crf=self.tkvars.export.crf.get(),
+            export_preset=self.tkvars.export.preset.get(),
+        )
+
+    def set_include_audio_preference(self):
+        """Set the prefer_include_audio user preference
+        from the tkvar
+        """
+        self.vars.user_settings.update(
+            prefer_include_audio=bool(self.tkvars.export.include_audio.get())
+        )
 
     def toggle_crop_display(self, *unused_arguments):
         """Toggle crop area preview update"""
@@ -537,6 +555,7 @@ class Panels(core.Panels):
         include_audio = tkinter.Checkbutton(
             sidebar_frame,
             anchor=tkinter.W,
+            command=self.application.callbacks.set_include_audio_preference,
             text="Include original audio",
             variable=self.tkvars.export.include_audio,
             indicatoron=1,
@@ -809,6 +828,50 @@ class Rollbacks(core.InterfacePlugin):
         self.tkvars.drag_action.set(self.vars.previous_drag_action)
 
 
+class Validator(core.Validator):
+
+    """Validate user settings"""
+
+    @staticmethod
+    def checked_export_crf(export_crf):
+        """Check if export_crf is inside the allowd range"""
+        minimum_crf = 0
+        maximum_crf = 51
+        if not isinstance(export_crf, int):
+            raise ValueError("Wrong type, must be an integer")
+        #
+        if export_crf < minimum_crf:
+            logging.warning(
+                "Adjusted export_crf to minimum (%s)", minimum_crf
+            )
+            return minimum_crf
+        #
+        if export_crf > maximum_crf:
+            logging.warning(
+                "Adjusted export_crf to maximum (%s)", maximum_crf
+            )
+            return maximum_crf
+        #
+        return export_crf
+
+    def checked_export_preset(self, export_preset):
+        """Check if export_preset is supported"""
+        self.must_be_in_collection(
+            export_preset,
+            EXPORT_PRESETS,
+            "Unsupported preset"
+        )
+        return export_preset
+
+    @staticmethod
+    def checked_prefer_include_audio(prefer_include_audio):
+        """Check for True or False"""
+        if prefer_include_audio not in (True, False):
+            raise ValueError("Unsupported value")
+        #
+        return prefer_include_audio
+
+
 class VideoUI(core.UserInterface):
 
     """Modular user interface for video pixelation"""
@@ -826,6 +889,15 @@ class VideoUI(core.UserInterface):
     panel_class = Panels
     post_panel_action_class = PostPanelActions
     rollback_class = Rollbacks
+    validator_class = Validator
+
+    default_settings = dict(
+        tilesize=10,
+        export_crf=18,
+        export_preset="ultrafast",
+        prefer_include_audio=True,
+        **core.DEFAULT_SETTINGS,
+    )
 
     def __init__(self, file_path, options):
         """Initialize the super class"""
@@ -868,34 +940,24 @@ class VideoUI(core.UserInterface):
                 "change_frame_from_text"
             ),
             end_frame=tkinter.IntVar(),
-            exit_after_save=tkinter.IntVar(),
             export=core.Namespace(
-                crf=tkinter.IntVar(),
+                crf=self.callbacks.get_traced_intvar(
+                    "set_export_preferences",
+                    value=self.vars.user_settings.export_crf,
+                ),
+                preset=self.callbacks.get_traced_stringvar(
+                    "set_export_preferences",
+                    value=self.vars.user_settings.export_preset,
+                ),
                 include_audio=tkinter.IntVar(),
-                preset=tkinter.StringVar(),
-            ),
-            buttonstate=core.Namespace(
-                previous=self.callbacks.get_traced_stringvar(
-                    "update_buttons", value=tkinter.DISABLED
-                ),
-                next_=self.callbacks.get_traced_stringvar(
-                    "update_buttons", value=tkinter.NORMAL
-                ),
-                apply=self.callbacks.get_traced_stringvar(
-                    "update_buttons", value=tkinter.DISABLED
-                ),
             ),
         )
-        self.tkvars.exit_after_save.set(1)
-        self.tkvars.export.crf.set(DEFAULT_EXPORT_CRF)
-        self.tkvars.export.preset.set(DEFAULT_EXPORT_PRESET)
 
     def additional_widgets(self):
         """Subclass-specific post-initialization
         (additional widgets)
         """
         self.widgets.update(
-            buttons=core.Namespace(previous=None, next_=None, more=None),
             frame_canvas=None,
             frames_slider=None,
             frame_number=None,
@@ -1031,7 +1093,9 @@ class VideoUI(core.UserInterface):
             )
         )
         logging.debug("%r has audio: %r", file_path.name, has_audio)
-        self.tkvars.export.include_audio.set(int(has_audio))
+        self.tkvars.export.include_audio.set(
+            int(has_audio and self.vars.user_settings.prefer_include_audio)
+        )
         self.vars.update(has_audio=has_audio)
         label = tkinter.Label(progress.body, text="Examining video stream …")
         label.grid()
@@ -1463,7 +1527,7 @@ class VideoUI(core.UserInterface):
         self.vars.kept_frames.update(start=1, end=self.vars.nb_frames)
         self.vars.stations.clear()
         self.vars.later_stations.clear()
-        self.tkvars.file_name.set(file_path.name)
+        self.tkvars.file_name.set(core.shortened_file_name(file_path.name))
         self.tkvars.current_frame.set(1)
 
     def start_new_route(self):
