@@ -1,6 +1,7 @@
 {
   "name": "Pyxelate",
   "comment": "pixelate images or videos",
+  "nemo_icon_name": "applications-graphics-symbolic",
   "relative_path": "pixelate.py",
   "extensions": "mp4;mkv;webm;avi;jpg;jpeg;png;gif;webp",
   "mimetypes": "image/*;video/*",

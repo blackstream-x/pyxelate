@@ -6,6 +6,8 @@
 #
 # Update help files by creating JSON files from the original YAML files
 #
+# Requires four_letter_config from https://pypi.org/project/four-letter-config/
+#
 # Copyright (C) 2021 Rainer Schwarzbach
 #
 # This file is part of pyxelate.
@@ -30,5 +32,9 @@ SCRIPT_PATH=$(dirname $0)
 
 for topic in pixelate_image pixelate_video ; do
     file_stub="${SCRIPT_PATH}/docs/${topic}_help"
-    ${SCRIPT_PATH}/configfile.py translate ${file_stub}.yaml ${file_stub}.json --overwrite
+    if four_letter_config compare ${file_stub}.yaml ${file_stub}.json ; then
+        echo "${file_stub}.json is already up to date."
+    else
+        four_letter_config translate ${file_stub}.yaml ${file_stub}.json --overwrite
+    fi
 done
