@@ -285,7 +285,7 @@ class ImageUI(core.UserInterface):
         """
         if (
             self.vars.open_support
-            and file_path.suffix not in self.vars.open_support
+            and file_path.suffix.lower() not in self.vars.open_support
         ):
             return False
         #
