@@ -197,7 +197,7 @@ def pixelated(original_image, box=None, tilesize=DEFAULT_TILESIZE):
         oversized = original_image.crop(box=(box[0], box[1], right, bottom))
     else:
         oversized = Image.new(
-            original_image.mode,
+            "RGB",
             (oversize_width, oversize_height),
             color=most_frequent_color(original_image),
         )
