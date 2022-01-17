@@ -841,15 +841,11 @@ class Validator(core.Validator):
             raise ValueError("Wrong type, must be an integer")
         #
         if export_crf < minimum_crf:
-            logging.warning(
-                "Adjusted export_crf to minimum (%s)", minimum_crf
-            )
+            logging.warning("Adjusted export_crf to minimum (%s)", minimum_crf)
             return minimum_crf
         #
         if export_crf > maximum_crf:
-            logging.warning(
-                "Adjusted export_crf to maximum (%s)", maximum_crf
-            )
+            logging.warning("Adjusted export_crf to maximum (%s)", maximum_crf)
             return maximum_crf
         #
         return export_crf
@@ -857,9 +853,7 @@ class Validator(core.Validator):
     def checked_export_preset(self, export_preset):
         """Check if export_preset is supported"""
         self.must_be_in_collection(
-            export_preset,
-            EXPORT_PRESETS,
-            "Unsupported preset"
+            export_preset, EXPORT_PRESETS, "Unsupported preset"
         )
         return export_preset
 

@@ -1436,8 +1436,7 @@ class UserInterface:
         center_x = self.tkvars.selection.center_x.get() or im_width // 2
         center_y = self.tkvars.selection.center_y.get() or im_height // 2
         shape = (
-            self.tkvars.selection.shape.get()
-            or self.vars.user_settings.shape
+            self.tkvars.selection.shape.get() or self.vars.user_settings.shape
         )
         tilesize = (
             self.tkvars.selection.tilesize.get()
@@ -1570,7 +1569,8 @@ class UserInterface:
                 "Saving preferences failed",
                 f"Could not save preferences: {error}",
                 parent=self.main_window,
-                icon=messagebox.ERROR)
+                icon=messagebox.ERROR,
+            )
         else:
             with open(
                 self.vars.settings_path,
