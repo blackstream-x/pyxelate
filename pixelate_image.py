@@ -401,8 +401,9 @@ class ImageUI(core.UserInterface):
         ] + [("All files", "*.*")]
         self.vars.update(disable_key_events=True)
         selected_file = filedialog.asksaveasfilename(
-            initialfile=f"{self.vars.original_path.stem}_pyxelate"
-                f"{self.vars.original_path.suffix}",
+            initialfile=f"{self.vars.original_path.stem}"
+            f"{self.vars.user_settings.save_appendix}"
+            f"{self.vars.original_path.suffix}",
             initialdir=str(self.vars.original_path.parent),
             defaultextension=original_suffix,
             filetypes=filetypes,

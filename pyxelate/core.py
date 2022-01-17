@@ -119,6 +119,7 @@ DEFAULT_SETTINGS = dict(
     show_preview=1,
     indicator_color="red",
     rubberband_color="blue",
+    save_appendix="_pyxelate",
 )
 
 
@@ -1002,7 +1003,9 @@ class Validator(InterfacePlugin):
 
     def checked_indicator_color(self, color):
         """Check for a valid color"""
-        self.must_be_in_collection(color, POSSIBLE_INDICATOR_COLORS, "Unknown color")
+        self.must_be_in_collection(
+            color, POSSIBLE_INDICATOR_COLORS, "Unknown color"
+        )
         return color
 
     checked_rubberband_color = checked_indicator_color
@@ -1018,6 +1021,17 @@ class Validator(InterfacePlugin):
             raise ValueError("Must be 0 or 1")
         #
         return show_preview
+
+    @staticmethod
+    def checked_save_appendix(save_appendix):
+        """Set save appendix"""
+        if not isinstance(save_appendix, str):
+            if not save_appendix:
+                return ""
+            #
+            raise ValueError("Wrong type, must be an integer")
+        #
+        return save_appendix
 
     @staticmethod
     def checked_tilesize(tilesize):
