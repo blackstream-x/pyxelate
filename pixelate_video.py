@@ -1238,6 +1238,8 @@ class VideoUI(core.UserInterface):
         original_suffix = self.vars.original_path.suffix
         self.vars.update(disable_key_events=True)
         selected_file = filedialog.asksaveasfilename(
+            initialfile=f"{self.vars.original_path.stem}_pyxelate"
+                f"{self.vars.original_path.suffix}",
             initialdir=str(self.vars.original_path.parent),
             defaultextension=original_suffix,
             parent=self.main_window,
