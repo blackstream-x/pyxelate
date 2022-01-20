@@ -1029,7 +1029,7 @@ class Validator(InterfacePlugin):
             if not save_appendix:
                 return ""
             #
-            raise ValueError("Wrong type, must be an integer")
+            raise ValueError("Wrong type, must be a string")
         #
         return save_appendix
 
